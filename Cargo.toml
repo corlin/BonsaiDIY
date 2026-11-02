@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "crates/bonsai-core",
+]
+resolver = "2"
