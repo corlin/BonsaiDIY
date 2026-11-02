@@ -1,76 +1,626 @@
-# 《树境·盆景道》M0 阶段玩法原型与物理手感实施计划
+# 《树境·盆景道》Rust 核心内核与 WASM/Web 交互原型实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 构建一个在浏览器中运行、无外部重型依赖的 TypeScript + Three.js 盆景物理修剪与生长原型（M0 Prototype），严格验证 Pałubicki 芽命运决策、达芬奇管道粗细定理、剪枝诱导潜伏芽萌发（Clip & Grow 蓄枝截干）与铝丝蟠扎形变手感，并提供确定性操作回放机制。
+**Goal:** 基于 **Rust** 构建确定性盆景物理生长与修剪内核（`crates/bonsai-core`），利用 `wasm-pack` 编译为 WebAssembly，并在前端（Vite + TypeScript + Three.js）中跑通剪枝、达芬奇管道粗度重算、潜伏芽萌发（Clip & Grow）与结构骨架透视渲染，同时保留 C-ABI 供后续 Unity 移动原生端直接调用。
 
-**Architecture:** 采用**数据-模拟-渲染三层完全解耦**。模拟内核采用纯 TypeScript 实现（作为后续 Rust 内核的直接参照规约），不引用任何 DOM 或 Three.js 依赖；渲染层负责将拓扑图（TreeGraph）转化为动态管状网格（Cylinder/Tube Mesh）和叶片团块；输入层通过 Raycaster 捕获枝段并执行原子化园艺操作指令（ActionCommand），同时记录可追溯的操作事件流。
+**Architecture:** 
+1. **Rust 原生内核 (`crates/bonsai-core`)**：纯 Rust 实现，不含平台相关代码。维护树拓扑图、芽命运竞争、能量储备与修剪算子。自带原生 `cargo test` 单元测试。
+2. **WASM 绑定层 (`crates/bonsai-core/src/wasm.rs`)**：通过 `wasm-bindgen` 向前端快速导出紧凑二进制/类型化几何数据（Flat Float32Array 缓冲区），杜绝大量 JS-WASM 跨边界对象传递开销。
+3. **C-ABI 导出 (`crates/bonsai-core/src/ffi.rs`)**：导出基础 C 兼容接口，供后续 Unity 原生插件调用。
+4. **前端渲染表现层 (`web/`)**：Vite + Three.js 通过加载 WASM 模块，实现 3D 射线交互点选剪枝、骨架透视着色与 HUD 统计。
 
-**Tech Stack:** TypeScript 5.x, Three.js, Vite, Vitest (单元测试), TailwindCSS (极简 HUD 控制面板)
-
-## Global Constraints
-- 所有物理生长与修剪计算必须在纯逻辑层完成，严禁在渲染循环中直接修改生理拓扑结构。
-- 模拟过程必须具备严格的确定性：给定相同的随机数种子（Seed）和相同的操作指令序列，必须产生几何拓扑逐字节一致的树木状态。
-- 遵循 TDD 流程：先写失败测试，验证失败，写最小实现，验证通过，立即提交。
-- 文件路径一律使用小写字母加短横线或语义清晰的模块结构。
+**Tech Stack:** Rust (Edition 2021), wasm-pack, wasm-bindgen, TypeScript, Vite, Three.js, Vitest.
 
 ---
 
-## 模块与文件目录分解图
+## 目录结构规划
 
 ```
-src/
-├── core/                        # 纯数学与生理逻辑内核（无 UI/Three.js 依赖）
-│   ├── math/
-│   │   ├── rng.ts               # 确定性伪随机数发生器 (PCG/Xorshift)
-│   │   └── spline.ts            # 三次贝塞尔样条与挠度物理形变
-│   ├── model/
-│   │   ├── types.ts             # 芽、节间、树木拓扑核心接口
-│   │   └── tree-graph.ts        # 树拓扑 DAG 图结构、达芬奇管道模型计算
-│   ├── simulation/
-│   │   ├── growth-engine.ts     # 生理演进器：光通量、顶端优势分配、节间伸长
-│   │   └── pruning-engine.ts    # 园艺技法算子：回缩截断、疏剪、潜伏芽萌发激活
-│   └── replay/
-│       └── action-log.ts        # 确定性指令日志、快照序列化与反序列化
-├── view/                        # Three.js 渲染与交互表现层
-│   ├── mesh-generator.ts        # 树木骨干网格程序化生成器 (动态管状 Mesh)
-│   ├── foliage-renderer.ts      # 风格化叶簇团块生成
-│   ├── skeleton-view.ts         # 结构透视镜 (枝序高亮、半透明滤镜)
-│   └── scene-setup.ts           # 柔和漫反射环境光、地面阴影与相机控制器
-└── main.ts                      # 原型挂载入口与交互控制手柄 (剪枝/蟠扎/时间快进)
-tests/                           # Vitest 单元测试集
-├── rng.test.ts
-├── tree-graph.test.ts
-├── pruning-engine.test.ts
-└── action-log.test.ts
+/
+├── Cargo.toml                       # Rust Workspace 配置
+├── crates/
+│   └── bonsai-core/                 # 核心 Rust 模拟引擎
+│       ├── Cargo.toml
+│       ├── src/
+│       │   ├── lib.rs               # 模块入口
+│       │   ├── rng.rs               # 确定性伪随机发生器 (PCG/Xorshift)
+│       │   ├── model.rs             # 树木 DAG 拓扑与节间/芽数据结构
+│       │   ├── pipe.rs              # 达芬奇管道模型粗细计算 (Pipe Model)
+│       │   ├── prune.rs             # 剪枝算子与潜伏芽激活 (Clip & Grow)
+│       │   ├── wasm.rs              # wasm-bindgen 快速导出接口
+│       │   └── ffi.rs               # Unity C-ABI 预留导出
+│       └── tests/
+│           ├── rng_tests.rs
+│           ├── pipe_tests.rs
+│           └── prune_tests.rs
+├── web/                             # 前端渲染展示与交互 (Vite + Three.js)
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── vite.config.ts
+│   ├── index.html
+│   └── src/
+│       ├── main.ts                  # WASM 载入、场景初始化、Raycaster 点选剪枝
+│       └── view/
+│           ├── mesh-generator.ts    # 解析 WASM 缓冲区并生成 Three.js Mesh
+│           ├── skeleton-view.ts     # 骨架透视控制器
+│           └── scene-setup.ts       # 光照、阴影、盆器与相机
 ```
 
 ---
 
-### Task 1: 项目工程与测试环境脚手架搭建
+### Task 1: Rust Workspace 与 bonsai-core 基础工程搭建
 
 **Files:**
-- Create: `package.json`
-- Create: `tsconfig.json`
-- Create: `vite.config.ts`
-- Create: `index.html`
-- Create: `tests/setup.ts`
+- Create: `Cargo.toml`
+- Create: `crates/bonsai-core/Cargo.toml`
+- Create: `crates/bonsai-core/src/lib.rs`
 
 **Interfaces:**
-- Produces: 能够运行 `npm run dev` 启动本地 Vite 开发服务器，运行 `npm run test` 执行 Vitest 自动化单元测试。
+- Produces: `crates/bonsai-core` 库，支持 `cargo test`。
 
-- [ ] **Step 1: 创建 package.json 并配置依赖**
+- [ ] **Step 1: 创建根目录 Cargo.toml**
+
+```toml
+[workspace]
+members = [
+    "crates/bonsai-core",
+]
+resolver = "2"
+```
+
+- [ ] **Step 2: 创建 `crates/bonsai-core/Cargo.toml`**
+
+```toml
+[package]
+name = "bonsai-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+```
+
+- [ ] **Step 3: 创建 `crates/bonsai-core/src/lib.rs`**
+
+```rust
+pub mod rng;
+pub mod model;
+pub mod pipe;
+pub mod prune;
+pub mod wasm;
+pub mod ffi;
+
+pub use model::TreeGraph;
+```
+
+- [ ] **Step 4: 编译检查**
+
+Run: `cargo check`
+Expected: 成功创建 Cargo.lock 并在后续模块填充后通过。
+
+---
+
+### Task 2: Rust 确定性随机数发生器 (PRNG) 实现与测试
+
+**Files:**
+- Create: `crates/bonsai-core/src/rng.rs`
+- Test: `crates/bonsai-core/tests/rng_tests.rs`
+
+**Interfaces:**
+- Produces: `DeterministicRng` 结构体，支持 `new(seed: u64)`, `next_f32() -> f32`, `range(min: f32, max: f32) -> f32`。
+
+- [ ] **Step 1: 编写测试 `crates/bonsai-core/tests/rng_tests.rs`**
+
+```rust
+use bonsai_core::rng::DeterministicRng;
+
+#[test]
+fn test_rng_determinism() {
+    let mut rng1 = DeterministicRng::new(12345);
+    let mut rng2 = DeterministicRng::new(12345);
+
+    for _ in 0..100 {
+        assert_eq!(rng1.next_f32(), rng2.next_f32());
+    }
+}
+
+#[test]
+fn test_rng_range() {
+    let mut rng = DeterministicRng::new(42);
+    for _ in 0..100 {
+        let val = rng.range(5.0, 15.0);
+        assert!(val >= 5.0 && val < 15.0);
+    }
+}
+```
+
+- [ ] **Step 2: 实现 `crates/bonsai-core/src/rng.rs`**
+
+```rust
+#[derive(Clone, Debug)]
+pub struct DeterministicRng {
+    state: u64,
+}
+
+impl DeterministicRng {
+    pub fn new(seed: u64) -> Self {
+        let state = if seed == 0 { 0x853c49e6748fea9b } else { seed };
+        Self { state }
+    }
+
+    pub fn next_u32(&mut self) -> u32 {
+        let mut x = self.state;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.state = x;
+        (x & 0xFFFFFFFF) as u32
+    }
+
+    pub fn next_f32(&mut self) -> f32 {
+        (self.next_u32() as f32) / 4294967296.0
+    }
+
+    pub fn range(&mut self, min: f32, max: f32) -> f32 {
+        min + self.next_f32() * (max - min)
+    }
+}
+```
+
+- [ ] **Step 3: 运行测试并验证通过**
+
+Run: `cargo test --test rng_tests`
+Expected: test result: ok. 2 passed.
+
+---
+
+### Task 3: 树木 DAG 拓扑模型与达芬奇管道模型粗度计算
+
+**Files:**
+- Create: `crates/bonsai-core/src/model.rs`
+- Create: `crates/bonsai-core/src/pipe.rs`
+- Test: `crates/bonsai-core/tests/pipe_tests.rs`
+
+**Interfaces:**
+- Produces: `TreeGraph`，提供 `create_base_internode`, `attach_internode`, `compute_pipe_model(exponent, min_tip_radius)`。
+
+- [ ] **Step 1: 编写测试 `crates/bonsai-core/tests/pipe_tests.rs`**
+
+```rust
+use bonsai_core::model::TreeGraph;
+
+#[test]
+fn test_pipe_model_da_vinci_rule() {
+    let mut tree = TreeGraph::new();
+    let base = tree.create_base_internode([0.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    let b1 = tree.attach_internode(base, [0.5, 2.0, 0.0], 1, 10);
+    let b2 = tree.attach_internode(base, [-0.5, 2.0, 0.0], 1, 10);
+
+    tree.compute_pipe_model(2.0, 0.05);
+
+    let r_base = tree.get_segment(base).unwrap().radius;
+    let r_b1 = tree.get_segment(b1).unwrap().radius;
+    let r_b2 = tree.get_segment(b2).unwrap().radius;
+
+    // r_base^2 ≈ r_b1^2 + r_b2^2
+    let area_base = r_base * r_base;
+    let area_children = r_b1 * r_b1 + r_b2 * r_b2;
+
+    assert!(r_base > r_b1);
+    assert!(r_base > r_b2);
+    assert!((area_base - area_children).abs() < 0.001);
+}
+```
+
+- [ ] **Step 2: 实现 `crates/bonsai-core/src/model.rs`**
+
+```rust
+use std::collections::HashMap;
+
+pub type Vector3D = [f32; 3];
+
+#[derive(Clone, Debug)]
+pub struct InternodeSegment {
+    pub id: u32,
+    pub parent_id: Option<u32>,
+    pub start_pos: Vector3D,
+    pub end_pos: Vector3D,
+    pub order: u8,
+    pub radius: f32,
+    pub leaf_count: u32,
+    pub is_wired: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct TreeGraph {
+    pub segments: HashMap<u32, InternodeSegment>,
+    pub root_id: Option<u32>,
+    next_id: u32,
+}
+
+impl TreeGraph {
+    pub fn new() -> Self {
+        Self {
+            segments: HashMap::new(),
+            root_id: None,
+            next_id: 1,
+        }
+    }
+
+    pub fn create_base_internode(&mut self, start: Vector3D, end: Vector3D) -> u32 {
+        let id = self.next_id;
+        self.next_id += 1;
+
+        let seg = InternodeSegment {
+            id,
+            parent_id: None,
+            start_pos: start,
+            end_pos: end,
+            order: 0,
+            radius: 0.1,
+            leaf_count: 1,
+            is_wired: false,
+        };
+        self.segments.insert(id, seg);
+        self.root_id = Some(id);
+        id
+    }
+
+    pub fn attach_internode(&mut self, parent_id: u32, end: Vector3D, order: u8, leaf_count: u32) -> u32 {
+        let parent_end = self.segments.get(&parent_id)
+            .expect("Parent segment not found")
+            .end_pos;
+
+        let id = self.next_id;
+        self.next_id += 1;
+
+        let seg = InternodeSegment {
+            id,
+            parent_id: Some(parent_id),
+            start_pos: parent_end,
+            end_pos: end,
+            order,
+            radius: 0.05,
+            leaf_count,
+            is_wired: false,
+        };
+        self.segments.insert(id, seg);
+        id
+    }
+
+    pub fn get_segment(&self, id: u32) -> Option<&InternodeSegment> {
+        self.segments.get(&id)
+    }
+
+    pub fn remove_subtree(&mut self, target_id: u32) -> Vec<u32> {
+        let mut removed = Vec::new();
+        let mut stack = vec![target_id];
+
+        while let Some(current_id) = stack.pop() {
+            removed.push(current_id);
+            for seg in self.segments.values() {
+                if seg.parent_id == Some(current_id) {
+                    stack.push(seg.id);
+                }
+            }
+        }
+
+        for id in &removed {
+            self.segments.remove(id);
+        }
+        removed
+    }
+}
+```
+
+- [ ] **Step 3: 实现 `crates/bonsai-core/src/pipe.rs`**
+
+```rust
+use crate::model::TreeGraph;
+use std::collections::HashMap;
+
+impl TreeGraph {
+    pub fn compute_pipe_model(&mut self, exponent: f32, min_tip_radius: f32) {
+        let mut children_map: HashMap<u32, Vec<u32>> = HashMap::new();
+        for seg in self.segments.values() {
+            if let Some(pid) = seg.parent_id {
+                children_map.entry(pid).or_default().push(seg.id);
+            }
+        }
+
+        fn calc_radius(
+            id: u32,
+            segments: &mut HashMap<u32, crate::model::InternodeSegment>,
+            children_map: &HashMap<u32, Vec<u32>>,
+            exponent: f32,
+            min_tip_radius: f32,
+        ) -> f32 {
+            let children = children_map.get(&id).cloned().unwrap_or_default();
+            if children.is_empty() {
+                let seg = segments.get_mut(&id).unwrap();
+                seg.radius = min_tip_radius * (seg.leaf_count as f32).sqrt().max(1.0);
+                return seg.radius;
+            }
+
+            let mut sum_exp = 0.0;
+            for child_id in children {
+                let r = calc_radius(child_id, segments, children_map, exponent, min_tip_radius);
+                sum_exp += r.powf(exponent);
+            }
+
+            let seg = segments.get_mut(&id).unwrap();
+            seg.radius = sum_exp.powf(1.0 / exponent);
+            seg.radius
+        }
+
+        if let Some(root) = self.root_id {
+            if self.segments.contains_key(&root) {
+                calc_radius(root, &mut self.segments, &children_map, exponent, min_tip_radius);
+            }
+        }
+    }
+}
+```
+
+- [ ] **Step 4: 运行测试并验证通过**
+
+Run: `cargo test --test pipe_tests`
+Expected: test result: ok. 1 passed.
+
+---
+
+### Task 4: 剪枝算子与潜伏芽萌发激活引擎
+
+**Files:**
+- Create: `crates/bonsai-core/src/prune.rs`
+- Test: `crates/bonsai-core/tests/prune_tests.rs`
+
+**Interfaces:**
+- Produces: `PruningEngine`，提供 `prune_branch(tree, target_id) -> PruneResult`，并在截口下方激活不定芽。
+
+- [ ] **Step 1: 编写测试 `crates/bonsai-core/tests/prune_tests.rs`**
+
+```rust
+use bonsai_core::model::TreeGraph;
+use bonsai_core::rng::DeterministicRng;
+use bonsai_core::prune::PruningEngine;
+
+#[test]
+fn test_clip_and_grow_prune() {
+    let mut rng = DeterministicRng::new(999);
+    let mut tree = TreeGraph::new();
+
+    let trunk = tree.create_base_internode([0.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    let branch = tree.attach_internode(trunk, [0.5, 1.8, 0.0], 1, 15);
+
+    let mut engine = PruningEngine::new();
+    let res = engine.prune_branch(&mut tree, branch, &mut rng);
+
+    assert_eq!(res.removed_count, 1);
+    assert!(tree.get_segment(branch).is_none());
+    assert!(tree.get_segment(trunk).is_some());
+    assert!(!res.activated_buds.is_empty());
+}
+```
+
+- [ ] **Step 2: 实现 `crates/bonsai-core/src/prune.rs`**
+
+```rust
+use crate::model::{TreeGraph, Vector3D};
+use crate::rng::DeterministicRng;
+
+pub struct PruneResult {
+    pub removed_count: usize,
+    pub biomass_loss_ratio: f32,
+    pub activated_buds: Vec<ActivatedBud>,
+}
+
+pub struct ActivatedBud {
+    pub parent_id: u32,
+    pub direction: Vector3D,
+}
+
+pub struct PruningEngine;
+
+impl PruningEngine {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub fn prune_branch(&mut self, tree: &mut TreeGraph, target_id: u32, rng: &mut DeterministicRng) -> PruneResult {
+        let total_leaves_before: u32 = tree.segments.values().map(|s| s.leaf_count).sum();
+        let parent_id = tree.get_segment(target_id).and_then(|s| s.parent_id);
+
+        let removed_ids = tree.remove_subtree(target_id);
+        let total_leaves_after: u32 = tree.segments.values().map(|s| s.leaf_count).sum();
+
+        let loss_ratio = if total_leaves_before > 0 {
+            (total_leaves_before - total_leaves_after) as f32 / total_leaves_before as f32
+        } else {
+            0.0
+        };
+
+        let mut activated_buds = Vec::new();
+        if let Some(pid) = parent_id {
+            if tree.get_segment(pid).is_some() {
+                let count = if rng.range(1.0, 3.0) > 1.8 { 2 } else { 1 };
+                for _ in 0..count {
+                    let angle = rng.range(0.0, std::f32::consts::TAU);
+                    let dir: Vector3D = [
+                        angle.cos() * 0.7,
+                        rng.range(0.2, 0.8),
+                        angle.sin() * 0.7,
+                    ];
+                    activated_buds.push(ActivatedBud { parent_id: pid, direction: dir });
+                }
+            }
+        }
+
+        tree.compute_pipe_model(2.0, 0.05);
+
+        PruneResult {
+            removed_count: removed_ids.len(),
+            biomass_loss_ratio: loss_ratio,
+            activated_buds,
+        }
+    }
+}
+```
+
+- [ ] **Step 3: 运行测试并验证通过**
+
+Run: `cargo test --test prune_tests`
+Expected: test result: ok. 1 passed.
+
+---
+
+### Task 5: WASM 快速导出接口 (Float32Array 零拷贝缓冲区) 与 Unity C-ABI 预留
+
+**Files:**
+- Create: `crates/bonsai-core/src/wasm.rs`
+- Create: `crates/bonsai-core/src/ffi.rs`
+
+**Interfaces:**
+- Produces: `BonsaiWasmEngine` 结构体，通过 `wasm_bindgen` 暴露 `init_tree()`, `prune(id)`, `get_render_buffer() -> Vec<f32>`。
+
+- [ ] **Step 1: 编写 `crates/bonsai-core/src/wasm.rs`**
+
+```rust
+use wasm_bindgen::prelude::*;
+use crate::model::TreeGraph;
+use crate::rng::DeterministicRng;
+use crate::prune::PruningEngine;
+
+#[wasm_bindgen]
+pub struct BonsaiWasmEngine {
+    tree: TreeGraph,
+    rng: DeterministicRng,
+    pruning: PruningEngine,
+}
+
+#[wasm_bindgen]
+impl BonsaiWasmEngine {
+    #[wasm_bindgen(constructor)]
+    pub fn new(seed: u32) -> Self {
+        let mut engine = Self {
+            tree: TreeGraph::new(),
+            rng: DeterministicRng::new(seed as u64),
+            pruning: PruningEngine::new(),
+        };
+        engine.init_default_tree();
+        engine
+    }
+
+    fn init_default_tree(&mut self) {
+        let base = self.tree.create_base_internode([0.0, 0.25, 0.0], [0.0, 0.8, 0.0]);
+        let b1 = self.tree.attach_internode(base, [0.3, 1.3, 0.1], 1, 15);
+        let b2 = self.tree.attach_internode(base, [-0.25, 1.4, -0.2], 1, 12);
+        self.tree.attach_internode(b1, [0.5, 1.8, 0.2], 2, 20);
+        self.tree.attach_internode(b2, [-0.4, 1.9, -0.3], 2, 18);
+        self.tree.compute_pipe_model(2.0, 0.05);
+    }
+
+    /// 执行剪枝，切除指定枝条并激活潜伏芽
+    pub fn prune_branch(&mut self, segment_id: u32) -> bool {
+        if self.tree.get_segment(segment_id).is_none() {
+            return false;
+        }
+        let res = self.pruning.prune_branch(&mut self.tree, segment_id, &mut self.rng);
+        for bud in res.activated_buds {
+            if let Some(parent) = self.tree.get_segment(bud.parent_id).cloned() {
+                let new_end = [
+                    parent.end_pos[0] + bud.direction[0] * 0.3,
+                    parent.end_pos[1] + bud.direction[1] * 0.3,
+                    parent.end_pos[2] + bud.direction[2] * 0.3,
+                ];
+                self.tree.attach_internode(parent.id, new_end, parent.order + 1, 5);
+            }
+        }
+        self.tree.compute_pipe_model(2.0, 0.05);
+        true
+    }
+
+    /// 打包全部节间数据供前端 Three.js 直读：
+    /// 每个枝段布局 [id, order, radius, startX, startY, startZ, endX, endY, endZ] (共 9 个 f32)
+    pub fn get_segments_buffer(&self) -> Vec<f32> {
+        let mut buffer = Vec::with_capacity(self.tree.segments.len() * 9);
+        for seg in self.tree.segments.values() {
+            buffer.push(seg.id as f32);
+            buffer.push(seg.order as f32);
+            buffer.push(seg.radius);
+            buffer.push(seg.start_pos[0]);
+            buffer.push(seg.start_pos[1]);
+            buffer.push(seg.start_pos[2]);
+            buffer.push(seg.end_pos[0]);
+            buffer.push(seg.end_pos[1]);
+            buffer.push(seg.end_pos[2]);
+        }
+        buffer
+    }
+}
+```
+
+- [ ] **Step 2: 编写 `crates/bonsai-core/src/ffi.rs` (Unity C-ABI 预留)**
+
+```rust
+use crate::model::TreeGraph;
+
+#[no_mangle]
+pub extern "C" fn bonsai_create_engine() -> *mut TreeGraph {
+    let tree = Box::new(TreeGraph::new());
+    Box::into_raw(tree)
+}
+
+#[no_mangle]
+pub extern "C" fn bonsai_destroy_engine(ptr: *mut TreeGraph) {
+    if !ptr.is_null() {
+        unsafe { drop(Box::from_raw(ptr)) };
+    }
+}
+```
+
+- [ ] **Step 3: 运行 `cargo check` 确保编译无误**
+
+Run: `cargo check`
+Expected: Finished dev profile.
+
+---
+
+### Task 6: 前端工程与 wasm-pack 构建链接集成
+
+**Files:**
+- Create: `web/package.json`
+- Create: `web/vite.config.ts`
+- Create: `web/tsconfig.json`
+- Create: `web/index.html`
+- Create: `web/src/view/scene-setup.ts`
+- Create: `web/src/view/skeleton-view.ts`
+- Create: `web/src/main.ts`
+
+- [ ] **Step 1: 安装 wasm-pack (如未安装) 并编译 WASM 包**
+
+Run: `which wasm-pack || cargo install wasm-pack`
+Run: `wasm-pack build crates/bonsai-core --target web --out-dir ../../web/pkg`
+Expected: 生成 `web/pkg/bonsai_core.js` 与 `web/pkg/bonsai_core_bg.wasm`。
+
+- [ ] **Step 2: 配置 `web/package.json`**
 
 ```json
 {
-  "name": "bonsai-dojo-prototype",
+  "name": "bonsai-dojo-web",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "test": "vitest run"
+    "build": "tsc && vite build"
   },
   "dependencies": {
     "three": "^0.170.0"
@@ -79,985 +629,130 @@ tests/                           # Vitest 单元测试集
     "@types/three": "^0.170.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
-    "vitest": "^2.1.4"
+    "vite-plugin-wasm": "^3.3.0",
+    "vite-plugin-top-level-await": "^1.4.4"
   }
 }
 ```
 
-- [ ] **Step 2: 创建 tsconfig.json**
-
-```json
-{
-  "compilerOptions": {
-    "target": "ESNext",
-    "useDefineForClassFields": true,
-    "module": "ESNext",
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "moduleResolution": "bundler",
-    "strict": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "esModuleInterop": true,
-    "noEmit": true,
-    "skipLibCheck": true
-  },
-  "include": ["src", "tests"]
-}
-```
-
-- [ ] **Step 3: 创建 vite.config.ts**
+- [ ] **Step 3: 配置 `web/vite.config.ts` 启用 WASM 支持**
 
 ```typescript
 import { defineConfig } from 'vite';
+import wasm from 'vite-plugin-wasm';
+import topLevelAwait from 'vite-plugin-top-level-await';
 
 export default defineConfig({
-  test: {
-    globals: true,
-    environment: 'node',
-  },
+  plugins: [wasm(), topLevelAwait()],
 });
 ```
 
-- [ ] **Step 4: 创建基础 HTML 入口 index.html**
-
-```html
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>树境·盆景道 | M0 物理手感交互原型</title>
-  <style>
-    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #22252a; font-family: sans-serif; }
-    #canvas-container { width: 100%; height: 100%; }
-    #hud-panel { position: absolute; top: 16px; left: 16px; background: rgba(20,24,30,0.85); backdrop-filter: blur(8px); padding: 14px; border-radius: 8px; color: #eee; min-width: 240px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
-    button { background: #3b4252; color: #eceff4; border: 1px solid #4c566a; padding: 6px 12px; margin: 4px 2px; border-radius: 4px; cursor: pointer; }
-    button:hover { background: #434c5e; }
-  </style>
-</head>
-<body>
-  <div id="hud-panel">
-    <h3 style="margin: 0 0 8px 0; font-size: 16px;">树境·盆景道 (M0 原型)</h3>
-    <div id="stats" style="font-size: 12px; color: #88c0d0; margin-bottom: 8px;">状态：就绪</div>
-    <div>
-      <button id="btn-grow-season">前进 1 个生长季 (+1 Year)</button>
-      <button id="btn-toggle-skeleton">骨架透视模式</button>
-      <button id="btn-undo">撤销 (Undo)</button>
-      <button id="btn-reset">重置为初始生胚</button>
-    </div>
-  </div>
-  <div id="canvas-container"></div>
-  <script type="module" src="/src/main.ts"></script>
-</body>
-</html>
-```
-
-- [ ] **Step 5: 验证安装与测试命令**
-
-Run: `npm install && npm run test`
-Expected: PASS (测试结果无报错，0 suites 或通过提示)
-
-- [ ] **Step 6: 提交脚手架**
-
-```bash
-git add package.json tsconfig.json vite.config.ts index.html
-git commit -m "chore: initialize M0 prototype project scaffolding with Vite and Vitest"
-```
-
----
-
-### Task 2: 确定性伪随机数发生器 (PRNG)
-
-**Files:**
-- Create: `src/core/math/rng.ts`
-- Test: `tests/rng.test.ts`
-
-**Interfaces:**
-- Produces: `DeterministicRng` 类，包含 `nextFloat(): number`, `range(min, max): number`, `fork(): DeterministicRng`。
-
-- [ ] **Step 1: 编写测试用例 `tests/rng.test.ts`**
-
-```typescript
-import { describe, it, expect } from 'vitest';
-import { DeterministicRng } from '../src/core/math/rng';
-
-describe('DeterministicRng', () => {
-  it('should produce identical float sequences from the same seed', () => {
-    const rng1 = new DeterministicRng(12345);
-    const rng2 = new DeterministicRng(12345);
-
-    for (let i = 0; i < 20; i++) {
-      expect(rng1.nextFloat()).toBe(rng2.nextFloat());
-    }
-  });
-
-  it('should produce different sequences from different seeds', () => {
-    const rng1 = new DeterministicRng(1111);
-    const rng2 = new DeterministicRng(9999);
-
-    const s1 = Array.from({ length: 5 }, () => rng1.nextFloat());
-    const s2 = Array.from({ length: 5 }, () => rng2.nextFloat());
-    expect(s1).not.toEqual(s2);
-  });
-
-  it('should generate floats in [0, 1) and correctly scale within range', () => {
-    const rng = new DeterministicRng(42);
-    for (let i = 0; i < 50; i++) {
-      const val = rng.range(5, 15);
-      expect(val).toBeGreaterThanOrEqual(5);
-      expect(val).toBeLessThan(15);
-    }
-  });
-});
-```
-
-- [ ] **Step 2: 运行测试验证失败**
-
-Run: `npx vitest run tests/rng.test.ts`
-Expected: FAIL (Cannot find module '../src/core/math/rng')
-
-- [ ] **Step 3: 编写最小实现 `src/core/math/rng.ts`**
-
-```typescript
-/**
- * 32位确定性线性同余/Xorshift混合随机发生器
- */
-export class DeterministicRng {
-  private state: number;
-
-  constructor(seed: number) {
-    this.state = (seed ^ 0x6c078965) >>> 0;
-  }
-
-  public nextUint32(): number {
-    let x = this.state;
-    x ^= x << 13;
-    x ^= x >>> 17;
-    x ^= x << 5;
-    this.state = x >>> 0;
-    return this.state;
-  }
-
-  public nextFloat(): number {
-    return (this.nextUint32() >>> 0) / 4294967296.0;
-  }
-
-  public range(min: number, max: number): number {
-    return min + this.nextFloat() * (max - min);
-  }
-
-  public fork(): DeterministicRng {
-    return new DeterministicRng(this.nextUint32());
-  }
-}
-```
-
-- [ ] **Step 4: 运行测试验证通过**
-
-Run: `npx vitest run tests/rng.test.ts`
-Expected: PASS
-
-- [ ] **Step 5: 提交代码**
-
-```bash
-git add src/core/math/rng.ts tests/rng.test.ts
-git commit -m "feat: implement deterministic pseudo-random number generator"
-```
-
----
-
-### Task 3: 树木拓扑结构与达芬奇管道粗度模型
-
-**Files:**
-- Create: `src/core/model/types.ts`
-- Create: `src/core/model/tree-graph.ts`
-- Test: `tests/tree-graph.test.ts`
-
-**Interfaces:**
-- Consumes: `DeterministicRng`
-- Produces: `TreeGraph` 类，维护节间段（Internode）、芽节点（Bud）、树枝层级（order），并提供 `computePipeModelRadii(exponent: number)` 计算全树各段物理粗细。
-
-- [ ] **Step 1: 定义核心接口 `src/core/model/types.ts`**
-
-```typescript
-export type Vector3D = [number, number, number];
-
-export enum BudType {
-  Terminal = 'terminal',  // 顶芽
-  Lateral = 'lateral',    // 侧芽
-  Dormant = 'dormant',    // 潜伏芽 (潜伏在树皮内部)
-}
-
-export interface BudNode {
-  id: string;
-  type: BudType;
-  position: Vector3D;
-  direction: Vector3D;
-  inhibited: boolean;     // 是否被顶端优势所抑制
-  vigor: number;          // 活力值 0.0 - 1.0
-}
-
-export interface InternodeSegment {
-  id: string;
-  parentId: string | null;
-  startPos: Vector3D;
-  endPos: Vector3D;
-  order: number;          // 0: 主干, 1: 一级主枝, 2: 二级次枝, 3+: 细分枝
-  radius: number;         // 截面物理半径 (由管道模型动态计算)
-  length: number;
-  terminalBudId?: string;
-  lateralBudIds: string[];
-  leafCount: number;      // 支撑的叶片数量
-  isWired: boolean;       // 是否处于蟠扎状态
-}
-```
-
-- [ ] **Step 2: 编写测试用例 `tests/tree-graph.test.ts`**
-
-```typescript
-import { describe, it, expect } from 'vitest';
-import { TreeGraph } from '../src/core/model/tree-graph';
-
-describe('TreeGraph & Pipe Model', () => {
-  it('should correctly attach internode and calculate radii via Da Vinci rule', () => {
-    const tree = new TreeGraph();
-    // 根基部段 (order 0)
-    const baseId = tree.createBaseInternode([0, 0, 0], [0, 1, 0]);
-    // 两个分枝
-    const branch1 = tree.attachInternode(baseId, [0, 2, 0.5], 1, 10);
-    const branch2 = tree.attachInternode(baseId, [0, 2, -0.5], 1, 15);
-
-    // 运行达芬奇管道模型计算粗度
-    tree.computePipeModelRadii(2.0, 0.05);
-
-    const base = tree.getSegment(baseId)!;
-    const b1 = tree.getSegment(branch1)!;
-    const b2 = tree.getSegment(branch2)!;
-
-    // 母枝截面积应近似等于两子枝截面积之和: r_base^2 ≈ r_1^2 + r_2^2
-    const baseArea = Math.PI * Math.pow(base.radius, 2);
-    const childrenArea = Math.PI * Math.pow(b1.radius, 2) + Math.PI * Math.pow(b2.radius, 2);
-
-    expect(base.radius).toBeGreaterThan(b1.radius);
-    expect(base.radius).toBeGreaterThan(b2.radius);
-    expect(Math.abs(baseArea - childrenArea)).toBeLessThan(0.001);
-  });
-});
-```
-
-- [ ] **Step 3: 运行测试验证失败**
-
-Run: `npx vitest run tests/tree-graph.test.ts`
-Expected: FAIL (Cannot find module '../src/core/model/tree-graph')
-
-- [ ] **Step 4: 编写实现 `src/core/model/tree-graph.ts`**
-
-```typescript
-import { Vector3D, InternodeSegment, BudNode, BudType } from './types';
-
-export class TreeGraph {
-  private segments: Map<string, InternodeSegment> = new Map();
-  private buds: Map<string, BudNode> = new Map();
-  private rootSegmentId: string | null = null;
-  private nextId = 1;
-
-  public createBaseInternode(start: Vector3D, end: Vector3D): string {
-    const id = `seg_${this.nextId++}`;
-    const segment: InternodeSegment = {
-      id,
-      parentId: null,
-      startPos: start,
-      endPos: end,
-      order: 0,
-      radius: 0.1,
-      length: this.distance(start, end),
-      lateralBudIds: [],
-      leafCount: 1,
-      isWired: false,
-    };
-    this.segments.set(id, segment);
-    this.rootSegmentId = id;
-    return id;
-  }
-
-  public attachInternode(parentId: string, end: Vector3D, order: number, initialLeaves = 5): string {
-    const parent = this.segments.get(parentId);
-    if (!parent) throw new Error(`Parent segment not found: ${parentId}`);
-
-    const id = `seg_${this.nextId++}`;
-    const segment: InternodeSegment = {
-      id,
-      parentId,
-      startPos: [...parent.endPos],
-      endPos: end,
-      order,
-      radius: 0.05,
-      length: this.distance(parent.endPos, end),
-      lateralBudIds: [],
-      leafCount: initialLeaves,
-      isWired: false,
-    };
-    this.segments.set(id, segment);
-    return id;
-  }
-
-  public getSegment(id: string): InternodeSegment | undefined {
-    return this.segments.get(id);
-  }
-
-  public getAllSegments(): InternodeSegment[] {
-    return Array.from(this.segments.values());
-  }
-
-  public removeSegmentSubtree(segmentId: string): string[] {
-    const removed: string[] = [];
-    const collect = (id: string) => {
-      removed.push(id);
-      for (const seg of this.segments.values()) {
-        if (seg.parentId === id) {
-          collect(seg.id);
-        }
-      }
-    };
-    collect(segmentId);
-    for (const id of removed) {
-      this.segments.delete(id);
-    }
-    return removed;
-  }
-
-  public computePipeModelRadii(exponent = 2.0, minTipRadius = 0.02): void {
-    const childrenMap = new Map<string, string[]>();
-    for (const seg of this.segments.values()) {
-      if (seg.parentId) {
-        const arr = childrenMap.get(seg.parentId) || [];
-        arr.push(seg.id);
-        childrenMap.set(seg.parentId, arr);
-      }
-    }
-
-    const computeRadius = (id: string): number => {
-      const seg = this.segments.get(id)!;
-      const children = childrenMap.get(id) || [];
-      if (children.length === 0) {
-        seg.radius = minTipRadius * Math.max(1.0, Math.sqrt(seg.leafCount));
-        return seg.radius;
-      }
-      let sumExp = 0;
-      for (const childId of children) {
-        const rChild = computeRadius(childId);
-        sumExp += Math.pow(rChild, exponent);
-      }
-      seg.radius = Math.pow(sumExp, 1.0 / exponent);
-      return seg.radius;
-    };
-
-    if (this.rootSegmentId && this.segments.has(this.rootSegmentId)) {
-      computeRadius(this.rootSegmentId);
-    }
-  }
-
-  private distance(a: Vector3D, b: Vector3D): number {
-    return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
-  }
-}
-```
-
-- [ ] **Step 5: 运行测试验证通过**
-
-Run: `npx vitest run tests/tree-graph.test.ts`
-Expected: PASS
-
-- [ ] **Step 6: 提交代码**
-
-```bash
-git add src/core/model/types.ts src/core/model/tree-graph.ts tests/tree-graph.test.ts
-git commit -m "feat: implement tree graph topology and Da Vinci pipe model radii calculation"
-```
-
----
-
-### Task 4: 园艺剪枝算子与潜伏芽萌发激活引擎
-
-**Files:**
-- Create: `src/core/simulation/pruning-engine.ts`
-- Test: `tests/pruning-engine.test.ts`
-
-**Interfaces:**
-- Consumes: `TreeGraph`, `DeterministicRng`
-- Produces: `PruningEngine`，提供 `pruneBranch(segmentId)`，计算切除损失比例，并在切口下方一定区间内唤醒潜伏芽（Back-budding），模拟蓄枝截干（Clip & Grow）的自然反应。
-
-- [ ] **Step 1: 编写测试用例 `tests/pruning-engine.test.ts`**
-
-```typescript
-import { describe, it, expect } from 'vitest';
-import { TreeGraph } from '../src/core/model/tree-graph';
-import { PruningEngine } from '../src/core/simulation/pruning-engine';
-import { DeterministicRng } from '../src/core/math/rng';
-
-describe('PruningEngine (Clip & Grow)', () => {
-  it('should remove target branch subtree and trigger back-budding below chop site', () => {
-    const rng = new DeterministicRng(777);
-    const tree = new TreeGraph();
-    const trunk0 = tree.createBaseInternode([0, 0, 0], [0, 1, 0]);
-    const trunk1 = tree.attachInternode(trunk0, [0, 2, 0], 0, 10);
-    const topBranch = tree.attachInternode(trunk1, [0, 3, 0], 1, 20);
-
-    const pruning = new PruningEngine(tree, rng);
-    
-    // 执行截顶截干 (Trunk Chop / Heading Back)
-    const result = pruning.pruneBranch(topBranch);
-
-    expect(result.removedCount).toBe(1);
-    expect(tree.getSegment(topBranch)).toBeUndefined();
-    expect(tree.getSegment(trunk1)).toBeDefined();
-
-    // 截顶后应激活切口下方的萌芽反应
-    expect(result.activatedBuds.length).toBeGreaterThan(0);
-  });
-});
-```
-
-- [ ] **Step 2: 运行测试验证失败**
-
-Run: `npx vitest run tests/pruning-engine.test.ts`
-Expected: FAIL (Cannot find module '../src/core/simulation/pruning-engine')
-
-- [ ] **Step 3: 编写实现 `src/core/simulation/pruning-engine.ts`**
-
-```typescript
-import { TreeGraph } from '../model/tree-graph';
-import { DeterministicRng } from '../math/rng';
-import { Vector3D } from '../model/types';
-
-export interface PruneResult {
-  removedCount: number;
-  biomassLossRatio: number;
-  activatedBuds: Array<{ parentId: string; direction: Vector3D }>;
-}
-
-export class PruningEngine {
-  constructor(private tree: TreeGraph, private rng: DeterministicRng) {}
-
-  public pruneBranch(targetSegmentId: string): PruneResult {
-    const allSegsBefore = this.tree.getAllSegments();
-    const totalLeavesBefore = allSegsBefore.reduce((acc, s) => acc + s.leafCount, 0);
-
-    const target = this.tree.getSegment(targetSegmentId);
-    if (!target) {
-      throw new Error(`Target segment not found: ${targetSegmentId}`);
-    }
-
-    const parentId = target.parentId;
-    const removedIds = this.tree.removeSegmentSubtree(targetSegmentId);
-
-    const totalLeavesAfter = this.tree.getAllSegments().reduce((acc, s) => acc + s.leafCount, 0);
-    const lossRatio = totalLeavesBefore > 0 ? (totalLeavesBefore - totalLeavesAfter) / totalLeavesBefore : 0;
-
-    const activatedBuds: Array<{ parentId: string; direction: Vector3D }> = [];
-
-    // 若存在母干段，在母干处激活 1-2 个不定芽（Back-budding），方向朝向外围
-    if (parentId && this.tree.getSegment(parentId)) {
-      const parentSeg = this.tree.getSegment(parentId)!;
-      const count = this.rng.range(1, 3) > 1.5 ? 2 : 1;
-      for (let i = 0; i < count; i++) {
-        const angle = this.rng.range(0, Math.PI * 2);
-        const dir: Vector3D = [
-          Math.cos(angle) * 0.7,
-          this.rng.range(0.2, 0.8),
-          Math.sin(angle) * 0.7,
-        ];
-        activatedBuds.push({ parentId: parentSeg.id, direction: dir });
-      }
-    }
-
-    // 重新计算达芬奇管道粗度
-    this.tree.computePipeModelRadii();
-
-    return {
-      removedCount: removedIds.length,
-      biomassLossRatio: lossRatio,
-      activatedBuds,
-    };
-  }
-}
-```
-
-- [ ] **Step 4: 运行测试验证通过**
-
-Run: `npx vitest run tests/pruning-engine.test.ts`
-Expected: PASS
-
-- [ ] **Step 5: 提交代码**
-
-```bash
-git add src/core/simulation/pruning-engine.ts tests/pruning-engine.test.ts
-git commit -m "feat: implement pruning operator and latent bud activation (clip & grow response)"
-```
-
----
-
-### Task 5: 确定性操作日志与状态重放机制
-
-**Files:**
-- Create: `src/core/replay/action-log.ts`
-- Test: `tests/action-log.test.ts`
-
-**Interfaces:**
-- Produces: `ActionLogManager`，记录每个原子指令（`ADD_SEED`, `PRUNE`, `WIRE`, `ADVANCE_SEASON`），生成可分享的紧凑 JSON 串，并支持从空白状态无损还原。
-
-- [ ] **Step 1: 编写测试用例 `tests/action-log.test.ts`**
-
-```typescript
-import { describe, it, expect } from 'vitest';
-import { ActionLogManager, ActionCommand } from '../src/core/replay/action-log';
-
-describe('ActionLogManager', () => {
-  it('should serialize actions and replay to verify identical log reconstruction', () => {
-    const manager = new ActionLogManager(9876);
-    manager.record({ type: 'INIT_STOCK', timestamp: 100, payload: { style: 'moyogi' } });
-    manager.record({ type: 'PRUNE_BRANCH', timestamp: 200, payload: { targetId: 'seg_2' } });
-
-    const serialized = manager.exportToJson();
-    expect(serialized).toContain('INIT_STOCK');
-
-    const restored = ActionLogManager.importFromJson(serialized);
-    expect(restored.getSeed()).toBe(9876);
-    expect(restored.getActions().length).toBe(2);
-    expect(restored.getActions()[1].type).toBe('PRUNE_BRANCH');
-  });
-});
-```
-
-- [ ] **Step 2: 运行测试验证失败**
-
-Run: `npx vitest run tests/action-log.test.ts`
-Expected: FAIL (Cannot find module '../src/core/replay/action-log')
-
-- [ ] **Step 3: 编写实现 `src/core/replay/action-log.ts`**
-
-```typescript
-export interface ActionCommand {
-  type: 'INIT_STOCK' | 'PRUNE_BRANCH' | 'APPLY_WIRE' | 'REMOVE_WIRE' | 'ADVANCE_SEASON';
-  timestamp: number;
-  payload: Record<string, unknown>;
-}
-
-export interface ReplayPayload {
-  version: string;
-  seed: number;
-  actions: ActionCommand[];
-}
-
-export class ActionLogManager {
-  private actions: ActionCommand[] = [];
-
-  constructor(private seed: number) {}
-
-  public record(action: ActionCommand): void {
-    this.actions.push(action);
-  }
-
-  public getSeed(): number {
-    return this.seed;
-  }
-
-  public getActions(): ActionCommand[] {
-    return [...this.actions];
-  }
-
-  public exportToJson(): string {
-    const payload: ReplayPayload = {
-      version: '1.0.0',
-      seed: this.seed,
-      actions: this.actions,
-    };
-    return JSON.stringify(payload);
-  }
-
-  public static importFromJson(jsonStr: string): ActionLogManager {
-    const data: ReplayPayload = JSON.parse(jsonStr);
-    const manager = new ActionLogManager(data.seed);
-    manager.actions = data.actions || [];
-    return manager;
-  }
-}
-```
-
-- [ ] **Step 4: 运行测试验证通过**
-
-Run: `npx vitest run tests/action-log.test.ts`
-Expected: PASS
-
-- [ ] **Step 5: 提交代码**
-
-```bash
-git add src/core/replay/action-log.ts tests/action-log.test.ts
-git commit -m "feat: implement deterministic action logging and replay serialization"
-```
-
----
-
-### Task 6: Three.js 动态管状网格与骨架透视渲染
-
-**Files:**
-- Create: `src/view/mesh-generator.ts`
-- Create: `src/view/skeleton-view.ts`
-- Create: `src/view/scene-setup.ts`
-
-**Interfaces:**
-- Consumes: `TreeGraph`, Three.js
-- Produces: `TreeMeshGenerator` 将节间段转换为锥柱体几何体（Cylinder/Tube），挂载唯一 segmentId 用户数据以支持 Raycaster 命中；`SkeletonView` 控制一键透视色彩层级与叶簇半透明。
-
-- [ ] **Step 1: 编写管状网格生成器 `src/view/mesh-generator.ts`**
+- [ ] **Step 4: 实现前端主控制器 `web/src/main.ts` 读取 WASM Buffer**
 
 ```typescript
 import * as THREE from 'three';
-import { TreeGraph } from '../core/model/tree-graph';
-import { InternodeSegment } from '../core/model/types';
-
-export class TreeMeshGenerator {
-  private barkMaterial: THREE.MeshStandardMaterial;
-  private highlightMaterial: THREE.MeshStandardMaterial;
-
-  constructor() {
-    this.barkMaterial = new THREE.MeshStandardMaterial({
-      color: 0x5a4632,
-      roughness: 0.85,
-      metalness: 0.1,
-    });
-    this.highlightMaterial = new THREE.MeshStandardMaterial({
-      color: 0xff4444,
-      emissive: 0x551111,
-      roughness: 0.5,
-    });
-  }
-
-  public buildTreeGroup(tree: TreeGraph): THREE.Group {
-    const group = new THREE.Group();
-    group.name = 'tree_root_group';
-
-    const segments = tree.getAllSegments();
-    for (const seg of segments) {
-      const mesh = this.createSegmentMesh(seg);
-      group.add(mesh);
-    }
-    return group;
-  }
-
-  private createSegmentMesh(seg: InternodeSegment): THREE.Mesh {
-    const p1 = new THREE.Vector3(...seg.startPos);
-    const p2 = new THREE.Vector3(...seg.endPos);
-    const dist = p1.distanceTo(p2);
-
-    const radiusTop = seg.radius * 0.85;
-    const radiusBottom = seg.radius;
-    const geom = new THREE.CylinderGeometry(radiusTop, radiusBottom, dist, 8);
-
-    const mesh = new THREE.Mesh(geom, this.barkMaterial);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-
-    // 定位与朝向
-    const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-    mesh.position.copy(mid);
-
-    const dir = new THREE.Vector3().subVectors(p2, p1).normalize();
-    const up = new THREE.Vector3(0, 1, 0);
-    const quat = new THREE.Quaternion().setFromUnitVectors(up, dir);
-    mesh.quaternion.copy(quat);
-
-    mesh.userData = { segmentId: seg.id, order: seg.order };
-    return mesh;
-  }
-}
-```
-
-- [ ] **Step 2: 编写骨架透视控制器 `src/view/skeleton-view.ts`**
-
-```typescript
-import * as THREE from 'three';
-
-export class SkeletonView {
-  private isSkeletonMode = false;
-  private readonly orderColors = [
-    0xe06c75, // 0: 主干 (红)
-    0x61afef, // 1: 一级主枝 (蓝)
-    0x98c379, // 2: 二级次枝 (绿)
-    0xd19a66, // 3+: 细分小枝 (橙)
-  ];
-
-  public toggle(treeGroup: THREE.Group): boolean {
-    this.isSkeletonMode = !this.isSkeletonMode;
-    this.apply(treeGroup);
-    return this.isSkeletonMode;
-  }
-
-  public apply(treeGroup: THREE.Group): void {
-    treeGroup.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.userData?.order !== undefined) {
-        if (this.isSkeletonMode) {
-          const order = Math.min(child.userData.order, this.orderColors.length - 1);
-          child.material = new THREE.MeshBasicMaterial({
-            color: this.orderColors[order],
-            wireframe: false,
-          });
-        } else {
-          child.material = new THREE.MeshStandardMaterial({
-            color: 0x5a4632,
-            roughness: 0.85,
-          });
-        }
-      }
-    });
-  }
-}
-```
-
-- [ ] **Step 3: 编写 3D 舞台环境 `src/view/scene-setup.ts`**
-
-```typescript
-import * as THREE from 'three';
-
-export class SceneSetup {
-  public scene: THREE.Scene;
-  public camera: THREE.PerspectiveCamera;
-  public renderer: THREE.WebGLRenderer;
-
-  constructor(container: HTMLElement) {
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x23272e);
-
-    this.camera = new THREE.PerspectiveCamera(
-      45,
-      container.clientWidth / container.clientHeight,
-      0.1,
-      100
-    );
-    this.camera.position.set(0, 2.5, 4.5);
-    this.camera.lookAt(0, 1.2, 0);
-
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setSize(container.clientWidth, container.clientHeight);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    container.appendChild(this.renderer.domElement);
-
-    this.setupLighting();
-    this.setupGround();
-    this.setupResize(container);
-  }
-
-  private setupLighting(): void {
-    const ambient = new THREE.AmbientLight(0xffffff, 0.8);
-    this.scene.add(ambient);
-
-    const dirLight = new THREE.DirectionalLight(0xffeedd, 1.4);
-    dirLight.position.set(5, 8, 4);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
-    this.scene.add(dirLight);
-  }
-
-  private setupGround(): void {
-    const potGeom = new THREE.CylinderGeometry(0.8, 0.6, 0.25, 32);
-    const potMat = new THREE.MeshStandardMaterial({ color: 0x3b3a36, roughness: 0.9 });
-    const pot = new THREE.Mesh(potGeom, potMat);
-    pot.position.y = 0.125;
-    pot.receiveShadow = true;
-    this.scene.add(pot);
-  }
-
-  private setupResize(container: HTMLElement): void {
-    window.addEventListener('resize', () => {
-      this.camera.aspect = container.clientWidth / container.clientHeight;
-      this.camera.updateProjectionMatrix();
-      this.renderer.setSize(container.clientWidth, container.clientHeight);
-    });
-  }
-
-  public render(): void {
-    this.renderer.render(this.scene, this.camera);
-  }
-}
-```
-
-- [ ] **Step 4: 提交表现层代码**
-
-```bash
-git add src/view/mesh-generator.ts src/view/skeleton-view.ts src/view/scene-setup.ts
-git commit -m "feat: implement procedural cylinder mesh generator and skeleton view"
-```
-
----
-
-### Task 7: 组装原型主入口与交互闭环 (点选剪枝、快进与撤销)
-
-**Files:**
-- Create: `src/main.ts`
-
-**Interfaces:**
-- Consumes: 所有前置模块 (`SceneSetup`, `TreeGraph`, `PruningEngine`, `TreeMeshGenerator`, `SkeletonView`, `ActionLogManager`)
-- Produces: 启动完整的网页交互程序，支持鼠标/手指点击树枝实施截枝，实时重绘并触发切口萌发。
-
-- [ ] **Step 1: 编写主入口 `src/main.ts`**
-
-```typescript
-import * as THREE from 'three';
+import init, { BonsaiWasmEngine } from '../pkg/bonsai_core.js';
 import { SceneSetup } from './view/scene-setup';
-import { TreeGraph } from './core/model/tree-graph';
-import { DeterministicRng } from './core/math/rng';
-import { PruningEngine } from './core/simulation/pruning-engine';
-import { TreeMeshGenerator } from './view/mesh-generator';
 import { SkeletonView } from './view/skeleton-view';
-import { ActionLogManager } from './core/replay/action-log';
 
-class BonsaiApp {
-  private stage: SceneSetup;
-  private rng: DeterministicRng;
-  private tree: TreeGraph;
-  private pruning: PruningEngine;
-  private meshGen: TreeMeshGenerator;
-  private skeleton: SkeletonView;
-  private log: ActionLogManager;
-  private treeGroup: THREE.Group | null = null;
-  private raycaster = new THREE.Raycaster();
-  private mouse = new THREE.Vector2();
+async function bootstrap() {
+  await init();
+  const engine = new BonsaiWasmEngine(2026);
+  const container = document.getElementById('canvas-container')!;
+  const stage = new SceneSetup(container);
+  const skeleton = new SkeletonView();
 
-  constructor() {
-    const container = document.getElementById('canvas-container')!;
-    this.stage = new SceneSetup(container);
-    this.rng = new DeterministicRng(2026);
-    this.log = new ActionLogManager(2026);
-    this.tree = new TreeGraph();
-    this.pruning = new PruningEngine(this.tree, this.rng);
-    this.meshGen = new TreeMeshGenerator();
-    this.skeleton = new SkeletonView();
+  let treeGroup = new THREE.Group();
+  stage.scene.add(treeGroup);
 
-    this.initDefaultStock();
-    this.rebuildMesh();
-    this.setupEvents();
-    this.animate();
-  }
+  const barkMaterial = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.85 });
 
-  private initDefaultStock(): void {
-    const base = this.tree.createBaseInternode([0, 0.25, 0], [0, 0.8, 0]);
-    const b1 = this.tree.attachInternode(base, [0.3, 1.3, 0.1], 1, 15);
-    const b2 = this.tree.attachInternode(base, [-0.25, 1.4, -0.2], 1, 12);
-    this.tree.attachInternode(b1, [0.5, 1.8, 0.2], 2, 20);
-    this.tree.attachInternode(b2, [-0.4, 1.9, -0.3], 2, 18);
-    this.tree.computePipeModelRadii();
-  }
-
-  private rebuildMesh(): void {
-    if (this.treeGroup) {
-      this.stage.scene.remove(this.treeGroup);
+  function renderTreeFromWasm() {
+    // 清空现有 Mesh
+    while (treeGroup.children.length > 0) {
+      treeGroup.remove(treeGroup.children[0]);
     }
-    this.treeGroup = this.meshGen.buildTreeGroup(this.tree);
-    this.stage.scene.add(this.treeGroup);
-    this.updateStats();
+
+    const buffer = engine.get_segments_buffer();
+    // 缓冲区按每 9 个浮点数一个节间段展开: [id, order, radius, sx, sy, sz, ex, ey, ez]
+    for (let i = 0; i < buffer.length; i += 9) {
+      const id = buffer[i];
+      const order = buffer[i + 1];
+      const radius = buffer[i + 2];
+      const p1 = new THREE.Vector3(buffer[i + 3], buffer[i + 4], buffer[i + 5]);
+      const p2 = new THREE.Vector3(buffer[i + 6], buffer[i + 7], buffer[i + 8]);
+
+      const dist = p1.distanceTo(p2);
+      const geom = new THREE.CylinderGeometry(radius * 0.85, radius, dist, 8);
+      const mesh = new THREE.Mesh(geom, barkMaterial);
+
+      const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+      mesh.position.copy(mid);
+
+      const dir = new THREE.Vector3().subVectors(p2, p1).normalize();
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+
+      mesh.userData = { segmentId: id, order };
+      treeGroup.add(mesh);
+    }
   }
 
-  private updateStats(): void {
-    const stats = document.getElementById('stats')!;
-    const segs = this.tree.getAllSegments();
-    stats.innerText = `枝段数: ${segs.length} | 根盘粗度: ${(segs[0]?.radius * 100).toFixed(1)}cm`;
-  }
+  renderTreeFromWasm();
 
-  private setupEvents(): void {
-    window.addEventListener('click', (e) => {
-      this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-      this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  // Raycaster 点选剪枝
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
 
-      this.raycaster.setFromCamera(this.mouse, this.stage.camera);
-      if (!this.treeGroup) return;
+  window.addEventListener('click', (e) => {
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
 
-      const intersects = this.raycaster.intersectObjects(this.treeGroup.children);
-      if (intersects.length > 0) {
-        const hit = intersects[0].object;
-        const segmentId = hit.userData?.segmentId;
-        if (segmentId && hit.userData.order > 0) {
-          // 修剪被点中的侧枝
-          const res = this.pruning.pruneBranch(segmentId);
-          this.log.record({
-            type: 'PRUNE_BRANCH',
-            timestamp: Date.now(),
-            payload: { targetId: segmentId, loss: res.biomassLossRatio },
-          });
-
-          // 模拟潜伏芽萌发伸展为细幼枝
-          for (const bud of res.activatedBuds) {
-            const parent = this.tree.getSegment(bud.parentId)!;
-            const newEnd: [number, number, number] = [
-              parent.endPos[0] + bud.direction[0] * 0.3,
-              parent.endPos[1] + bud.direction[1] * 0.3,
-              parent.endPos[2] + bud.direction[2] * 0.3,
-            ];
-            this.tree.attachInternode(parent.id, newEnd, parent.order + 1, 5);
-          }
-          this.tree.computePipeModelRadii();
-          this.rebuildMesh();
+    raycaster.setFromCamera(mouse, stage.camera);
+    const hits = raycaster.intersectObjects(treeGroup.children);
+    if (hits.length > 0) {
+      const segId = hits[0].object.userData?.segmentId;
+      const order = hits[0].object.userData?.order;
+      if (segId !== undefined && order > 0) {
+        // 调用 Rust WASM 物理剪枝内核
+        const pruned = engine.prune_branch(segId);
+        if (pruned) {
+          renderTreeFromWasm();
         }
       }
-    });
-
-    document.getElementById('btn-toggle-skeleton')?.addEventListener('click', () => {
-      if (this.treeGroup) {
-        this.skeleton.toggle(this.treeGroup);
-      }
-    });
-  }
-
-  private animate = (): void => {
-    requestAnimationFrame(this.animate);
-    if (this.treeGroup) {
-      this.treeGroup.rotation.y += 0.002; // 微弱自转展示立体结构
     }
-    this.stage.render();
-  };
+  });
+
+  document.getElementById('btn-toggle-skeleton')?.addEventListener('click', () => {
+    skeleton.toggle(treeGroup);
+  });
+
+  function loop() {
+    requestAnimationFrame(loop);
+    treeGroup.rotation.y += 0.002;
+    stage.render();
+  }
+  loop();
 }
 
-new BonsaiApp();
+bootstrap();
 ```
 
-- [ ] **Step 2: 编译与本地构建校验**
+- [ ] **Step 5: 启动测试验证通过**
 
-Run: `npm run build`
-Expected: PASS (TypeScript 检查与 Vite 打包成功)
-
-- [ ] **Step 3: 运行全套单元测试**
-
-Run: `npm run test`
-Expected: PASS (所有单元测试全部通过)
-
-- [ ] **Step 4: 提交主应用代码**
-
-```bash
-git add src/main.ts
-git commit -m "feat: assemble M0 interactive prototype with raycast pruning and auto-budding"
-```
+Run: `cd web && npm install && npm run build`
+Expected: 构建成功，生成产物，WASM 正常链接。
 
 ---
 
-### Task 8: GitHub 远程代码库同步与发布检查
+### Task 7: 远程仓库同步与持续集成提交
 
 **Files:**
 - Modify: `.gitignore`
 
-- [ ] **Step 1: 完善 .gitignore 避免无关文件污染**
-
-```gitignore
-node_modules/
-dist/
-.DS_Store
-*.log
-```
-
-- [ ] **Step 2: 提交并推送到 GitHub 远程仓库**
+- [ ] **Step 1: 提交代码并推送远程 master 分支**
 
 ```bash
-git add .gitignore docs/superpowers/plans/2026-11-02-m0-prototype-implementation.md
-git commit -m "docs: complete M0 implementation plan with comprehensive TDD tasks"
+git add Cargo.toml crates/ web/ docs/superpowers/plans/2026-11-02-m0-prototype-implementation.md
+git commit -m "feat: complete Rust-first WASM core and Three.js integration implementation plan"
 git push origin master
 ```
