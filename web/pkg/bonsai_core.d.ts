@@ -4,39 +4,14 @@
 export class BonsaiWasmEngine {
     free(): void;
     [Symbol.dispose](): void;
-    /**
-     * 推进一个季节，返回包含四季更迭报表的 JSON 字符串
-     */
     advance_season(): string;
-    /**
-     * 对指定枝段缠绕铝丝并设定弯曲目标方向
-     */
-    apply_wire(segment_id: number, gauge_mm: number, target_dir_x: number, target_dir_y: number, target_dir_z: number): boolean;
-    /**
-     * 评估 Wiki 规则并返回教练诊断警告列表
-     */
-    evaluate_rules(recent_loss_ratio: number): string;
-    /**
-     * 获取最近一次修剪造成的生物质损失比例
-     */
+    apply_wire(segment_id: number, gauge_mm: number, dx: number, dy: number, dz: number): boolean;
+    evaluate_rules(recent_loss: number): string;
     get_last_loss_ratio(): number;
-    /**
-     * 打包全部节间数据供前端 Three.js 直读：
-     * 每个枝段布局 [id, order, radius, startX, startY, startZ, endX, endY, endZ] (共 9 个 f32)
-     */
     get_segments_buffer(): Float32Array;
-    /**
-     * 获取树木核心状态（季节、树龄、能量池、枝段数量）
-     */
     get_tree_info(): string;
     constructor(seed: number);
-    /**
-     * 执行剪枝，切除指定枝条并激活潜伏芽
-     */
     prune_branch(segment_id: number): boolean;
-    /**
-     * 拆除指定枝段上的铝丝
-     */
     remove_wire(segment_id: number): boolean;
 }
 

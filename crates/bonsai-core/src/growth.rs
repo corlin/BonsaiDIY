@@ -1,8 +1,9 @@
 use std::collections::HashSet;
 use crate::model::{Season, TreeGraph};
 use crate::rng::DeterministicRng;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SeasonReport {
     pub new_internodes_count: usize,
     pub energy_delta: f32,
@@ -60,122 +61,94 @@ impl GrowthEngine {
 
         let mut tip_ids: Vec<u32> = tree
             .segments
-            .values()
-            .filter(|s| !parent_ids.contains(&s.id))
-            .map(|s| s.id)
+            .keys()
+            .filter(|id| !parent_ids.contains(id))
+            .copied()
             .collect();
-
-        // 确定性排序保证多端回放严格一致
-        tip_ids.sort_unstable();
+        tip_ids.sort_unstable(); // 保证确定性
 
         let mut new_internodes_count = 0;
-        let mut new_segments = Vec::new();
+        let mut energy_spent = 0.0;
 
-        // 仅在能量池不为负时抽条生长
-        if tree.energy_pool > 0.0 {
-            for &tip_id in &tip_ids {
-                if let Some(tip) = tree.segments.get(&tip_id) {
-                    let dx = tip.end_pos[0] - tip.start_pos[0];
-                    let dy = tip.end_pos[1] - tip.start_pos[1];
-                    let dz = tip.end_pos[2] - tip.start_pos[2];
-                    let len = (dx * dx + dy * dy + dz * dz).sqrt();
-
-                    let (ux, uy, uz) = if len > 1e-4 {
-                        (dx / len, dy / len, dz / len)
-                    } else {
-                        (0.0, 1.0, 0.0)
-                    };
-
-                    // 结合生长扰动与负向向地性/向光性向上偏折
-                    let px = ux + rng.range(-0.1, 0.1);
-                    let py = (uy + rng.range(0.05, 0.15)).max(0.05);
-                    let pz = uz + rng.range(-0.1, 0.1);
-                    let plen = (px * px + py * py + pz * pz).sqrt();
-                    let (nx, ny, nz) = if plen > 1e-4 {
-                        (px / plen, py / plen, pz / plen)
-                    } else {
-                        (0.0, 1.0, 0.0)
-                    };
-
-                    let internode_len = rng.range(0.25, 0.35);
-                    let new_end = [
-                        tip.end_pos[0] + nx * internode_len,
-                        tip.end_pos[1] + ny * internode_len,
-                        tip.end_pos[2] + nz * internode_len,
+        if tree.energy_pool > 5.0 {
+            for tip_id in tip_ids {
+                if let Some(parent) = tree.segments.get(&tip_id).cloned() {
+                    let parent_dir = [
+                        parent.end_pos[0] - parent.start_pos[0],
+                        parent.end_pos[1] - parent.start_pos[1],
+                        parent.end_pos[2] - parent.start_pos[2],
                     ];
-                    let new_leaves = (rng.range(5.0, 8.0) as u32).max(1);
-                    new_segments.push((tip.id, new_end, tip.order, new_leaves));
+                    let len = (parent_dir[0].powi(2) + parent_dir[1].powi(2) + parent_dir[2].powi(2)).sqrt();
+                    let norm_dir = if len > 1e-4 {
+                        [parent_dir[0] / len, parent_dir[1] / len, parent_dir[2] / len]
+                    } else {
+                        [0.0, 1.0, 0.0]
+                    };
+
+                    let new_end = [
+                        parent.end_pos[0] + norm_dir[0] * 0.28 + rng.range(-0.06, 0.06),
+                        parent.end_pos[1] + norm_dir[1] * 0.28 + rng.range(0.02, 0.08),
+                        parent.end_pos[2] + norm_dir[2] * 0.28 + rng.range(-0.06, 0.06),
+                    ];
+
+                    let new_order = (parent.order + 1).min(4);
+                    tree.attach_internode(parent.id, new_end, new_order, 6);
+                    new_internodes_count += 1;
+                    energy_spent += 1.5;
                 }
             }
-
-            for (parent_id, new_end, order, leaves) in new_segments {
-                tree.attach_internode(parent_id, new_end, order, leaves);
-                new_internodes_count += 1;
-            }
+            tree.compute_pipe_model(2.0, 0.038);
         }
 
-        // 更新达芬奇管道粗度
-        tree.compute_pipe_model(2.0, 0.05);
-
-        // 萌发消耗能量
-        let energy_cost = (new_internodes_count as f32 * 5.0).max(5.0);
-        let energy_delta = -energy_cost.min(tree.energy_pool);
-        tree.energy_pool += energy_delta;
-
+        tree.energy_pool = (tree.energy_pool - energy_spent).max(0.0);
         tree.season = Season::Summer;
+
         SeasonReport {
             new_internodes_count,
-            energy_delta,
+            energy_delta: -energy_spent,
             season: Season::Spring,
         }
     }
 
     fn advance_summer(&mut self, tree: &mut TreeGraph) -> SeasonReport {
-        // 充足光合作用：能量池大幅累积 (leaves * 0.5)
         let total_leaves: u32 = tree.segments.values().map(|s| s.leaf_count).sum();
-        let energy_gain = (total_leaves as f32) * 0.5;
-        tree.energy_pool += energy_gain;
+        let energy_gained = (total_leaves as f32) * 0.5;
+        tree.energy_pool += energy_gained;
 
-        // 次生维管形成层分裂（全树粗度增加）
         for seg in tree.segments.values_mut() {
-            seg.radius = (seg.radius * 1.15).max(seg.radius + 0.005);
+            seg.radius = (seg.radius * 1.12).max(seg.radius + 0.002);
         }
 
         tree.season = Season::Autumn;
         SeasonReport {
             new_internodes_count: 0,
-            energy_delta: energy_gain,
+            energy_delta: energy_gained,
             season: Season::Summer,
         }
     }
 
     fn advance_autumn(&mut self, tree: &mut TreeGraph) -> SeasonReport {
-        // 形成过冬顶芽，叶片养分回流，树木为休眠做准备
         let total_leaves: u32 = tree.segments.values().map(|s| s.leaf_count).sum();
-        let resorption = (total_leaves as f32) * 0.1;
-        tree.energy_pool += resorption;
+        let energy_gained = (total_leaves as f32) * 0.1;
+        tree.energy_pool += energy_gained;
 
         tree.season = Season::Winter;
         SeasonReport {
             new_internodes_count: 0,
-            energy_delta: resorption,
+            energy_delta: energy_gained,
             season: Season::Autumn,
         }
     }
 
     fn advance_winter(&mut self, tree: &mut TreeGraph) -> SeasonReport {
-        // 进入休眠状态，度过低温积累阶段，消耗基础代谢能量
-        let winter_cost: f32 = 5.0;
-        let energy_delta = -winter_cost.min(tree.energy_pool);
-        tree.energy_pool += energy_delta;
-
-        // 冬季结束，树龄加 1，循环回春季
+        let dormant_cost = 2.0;
+        tree.energy_pool = (tree.energy_pool - dormant_cost).max(0.0);
         tree.year += 1;
         tree.season = Season::Spring;
 
         SeasonReport {
             new_internodes_count: 0,
-            energy_delta,
+            energy_delta: -dormant_cost,
             season: Season::Winter,
         }
     }

@@ -6,81 +6,33 @@ export interface SceneContext {
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   controls: OrbitControls;
-  container: HTMLElement;
-  keyLight: THREE.DirectionalLight;
-  fillLight: THREE.DirectionalLight;
+  dirLight: THREE.DirectionalLight;
   ambientLight: THREE.AmbientLight;
+  rimLight: THREE.DirectionalLight;
+  fillLight: THREE.DirectionalLight;
+  updateSeasonLighting: (season: string) => void;
   setSeasonLighting: (season: string) => void;
 }
 
-export interface SeasonalLightingConfig {
-  keyColor: number;
-  keyIntensity: number;
-  fillColor: number;
-  fillIntensity: number;
-  ambientColor: number;
-  ambientIntensity: number;
-  bgColor: number;
-}
-
-export const SEASONAL_LIGHTS: Record<string, SeasonalLightingConfig> = {
-  Spring: {
-    keyColor: 0xfffaed, // 清亮温润
-    keyIntensity: 2.1,
-    fillColor: 0xa5c4e8,
-    fillIntensity: 0.8,
-    ambientColor: 0xffffff,
-    ambientIntensity: 0.7,
-    bgColor: 0x181c22,
-  },
-  Summer: {
-    keyColor: 0xfff4d6, // 艳阳金辉
-    keyIntensity: 2.4,
-    fillColor: 0x90c2e7,
-    fillIntensity: 0.7,
-    ambientColor: 0xfffcf5,
-    ambientIntensity: 0.8,
-    bgColor: 0x191e24,
-  },
-  Autumn: {
-    keyColor: 0xffdfba, // 暮色斜阳
-    keyIntensity: 2.0,
-    fillColor: 0xd4a373,
-    fillIntensity: 0.75,
-    ambientColor: 0xfcf4ea,
-    ambientIntensity: 0.65,
-    bgColor: 0x221c1a,
-  },
-  Winter: {
-    keyColor: 0xddeeff, // 清冷霜蓝
-    keyIntensity: 1.8,
-    fillColor: 0x88aacc,
-    fillIntensity: 0.9,
-    ambientColor: 0xe8f0f8,
-    ambientIntensity: 0.6,
-    bgColor: 0x151922,
-  },
-};
-
-/**
- * Initializes the Three.js 3D viewport, camera, lights, orbit controls, and pot scenery.
- */
 export function createScene(
   container: HTMLElement,
-  onFrame?: (timeSeconds: number) => void
+  onAnimate?: (elapsedSeconds: number) => void
 ): SceneContext {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x181c22);
-  scene.fog = new THREE.FogExp2(0x181c22, 0.08);
+  // 东方茶室雅致柔和的冷杉水墨渐变背景
+  scene.background = new THREE.Color(0x1a1d24);
+  scene.fog = new THREE.FogExp2(0x1a1d24, 0.08);
 
-  const width = container.clientWidth || window.innerWidth;
-  const height = container.clientHeight || window.innerHeight;
-
-  const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+  const camera = new THREE.PerspectiveCamera(
+    38,
+    container.clientWidth / container.clientHeight,
+    0.1,
+    50
+  );
   camera.position.set(0, 1.8, 3.8);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-  renderer.setSize(width, height);
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -91,134 +43,82 @@ export function createScene(
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
-  controls.target.set(0, 1.1, 0);
-  controls.minDistance = 1.0;
+  controls.target.set(0, 0.85, 0);
+  controls.maxPolarAngle = Math.PI / 2 - 0.02; // 禁止镜头穿透桌面
+  controls.minDistance = 1.2;
   controls.maxDistance = 8.0;
-  controls.maxPolarAngle = Math.PI / 2 + 0.08;
-  controls.update();
 
-  // --- Lighting ---
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+  // ===== 专业三点艺术照明系统 =====
+  const ambientLight = new THREE.AmbientLight(0xdde5ee, 0.65);
   scene.add(ambientLight);
 
-  const keyLight = new THREE.DirectionalLight(0xfffaed, 2.0);
-  keyLight.position.set(4, 7, 3);
-  keyLight.castShadow = true;
-  keyLight.shadow.mapSize.width = 2048;
-  keyLight.shadow.mapSize.height = 2048;
-  keyLight.shadow.camera.near = 0.5;
-  keyLight.shadow.camera.far = 15;
-  keyLight.shadow.camera.left = -3;
-  keyLight.shadow.camera.right = 3;
-  keyLight.shadow.camera.top = 3;
-  keyLight.shadow.camera.bottom = -1;
-  keyLight.shadow.bias = -0.0005;
-  scene.add(keyLight);
+  const dirLight = new THREE.DirectionalLight(0xfffaec, 1.6);
+  dirLight.position.set(3.5, 6.0, 3.0);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.camera.near = 0.5;
+  dirLight.shadow.camera.far = 15;
+  dirLight.shadow.camera.left = -2;
+  dirLight.shadow.camera.right = 2;
+  dirLight.shadow.camera.top = 2.5;
+  dirLight.shadow.camera.bottom = -1.0;
+  dirLight.shadow.bias = -0.0005;
+  scene.add(dirLight);
 
-  const fillLight = new THREE.DirectionalLight(0xa5c4e8, 0.8);
-  fillLight.position.set(-4, 3, -3);
+  const rimLight = new THREE.DirectionalLight(0xcce2ff, 0.85);
+  rimLight.position.set(-4.0, 4.0, -3.5);
+  scene.add(rimLight);
+
+  const fillLight = new THREE.DirectionalLight(0xa59c8d, 0.35);
+  fillLight.position.set(0, -3, 2);
   scene.add(fillLight);
 
-  // --- Seasonal lighting handler ---
+  // ===== 雅致东方茶席与紫砂名盆 =====
+  setupTeaTableAndPot(scene);
+
   const setSeasonLighting = (season: string) => {
-    const config = SEASONAL_LIGHTS[season] || SEASONAL_LIGHTS.Spring;
-    keyLight.color.setHex(config.keyColor);
-    keyLight.intensity = config.keyIntensity;
-    fillLight.color.setHex(config.fillColor);
-    fillLight.intensity = config.fillIntensity;
-    ambientLight.color.setHex(config.ambientColor);
-    ambientLight.intensity = config.ambientIntensity;
-    if (scene.background instanceof THREE.Color) {
-      scene.background.setHex(config.bgColor);
-    }
-    if (scene.fog) {
-      scene.fog.color.setHex(config.bgColor);
+    switch (season) {
+      case 'Spring':
+        dirLight.color.setHex(0xfff6e5);
+        ambientLight.color.setHex(0xe0f2e9);
+        renderer.toneMappingExposure = 1.15;
+        break;
+      case 'Summer':
+        dirLight.color.setHex(0xffeed0);
+        ambientLight.color.setHex(0xd0e8ff);
+        renderer.toneMappingExposure = 1.25;
+        break;
+      case 'Autumn':
+        dirLight.color.setHex(0xffdfba);
+        ambientLight.color.setHex(0xe8d0b5);
+        renderer.toneMappingExposure = 1.08;
+        break;
+      case 'Winter':
+        dirLight.color.setHex(0xddeeff);
+        ambientLight.color.setHex(0xcfd8dc);
+        renderer.toneMappingExposure = 0.95;
+        break;
     }
   };
 
-  // --- Scenery: Bonsai Pot & Soil ---
-  const sceneryGroup = new THREE.Group();
-
-  // Ceramic bonsai pot (Trapezoidal / oval look)
-  const potGeo = new THREE.CylinderGeometry(0.85, 0.65, 0.28, 32);
-  const potMat = new THREE.MeshStandardMaterial({
-    color: 0x242830,
-    roughness: 0.7,
-    metalness: 0.15,
-  });
-  const pot = new THREE.Mesh(potGeo, potMat);
-  pot.position.y = 0.14;
-  pot.castShadow = true;
-  pot.receiveShadow = true;
-  sceneryGroup.add(pot);
-
-  // Pot rim accent
-  const rimGeo = new THREE.TorusGeometry(0.86, 0.03, 16, 48);
-  rimGeo.rotateX(Math.PI / 2);
-  const rimMat = new THREE.MeshStandardMaterial({
-    color: 0x1c2026,
-    roughness: 0.5,
-    metalness: 0.3,
-  });
-  const rim = new THREE.Mesh(rimGeo, rimMat);
-  rim.position.y = 0.27;
-  sceneryGroup.add(rim);
-
-  // Soil inside pot
-  const soilGeo = new THREE.CylinderGeometry(0.82, 0.82, 0.06, 32);
-  const soilMat = new THREE.MeshStandardMaterial({
-    color: 0x1f1a16,
-    roughness: 0.95,
-    metalness: 0.0,
-  });
-  const soil = new THREE.Mesh(soilGeo, soilMat);
-  soil.position.y = 0.25;
-  soil.receiveShadow = true;
-  sceneryGroup.add(soil);
-
-  // Decorative moss patch on soil
-  const mossGeo = new THREE.CylinderGeometry(0.55, 0.65, 0.03, 24);
-  const mossMat = new THREE.MeshStandardMaterial({
-    color: 0x2e4a2b,
-    roughness: 0.9,
-    metalness: 0.0,
-  });
-  const moss = new THREE.Mesh(mossGeo, mossMat);
-  moss.position.set(0.1, 0.27, -0.05);
-  sceneryGroup.add(moss);
-
-  // Ground shadow receiver plane
-  const floorGeo = new THREE.CircleGeometry(4, 48);
-  floorGeo.rotateX(-Math.PI / 2);
-  const floorMat = new THREE.ShadowMaterial({ opacity: 0.35 });
-  const floor = new THREE.Mesh(floorGeo, floorMat);
-  floor.position.y = 0.001;
-  floor.receiveShadow = true;
-  sceneryGroup.add(floor);
-
-  scene.add(sceneryGroup);
-
-  // --- Window Resize Handling ---
   const onResize = () => {
-    const w = container.clientWidth || window.innerWidth;
-    const h = container.clientHeight || window.innerHeight;
-    camera.aspect = w / h;
+    camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(w, h);
+    renderer.setSize(container.clientWidth, container.clientHeight);
   };
   window.addEventListener('resize', onResize);
 
-  // --- Animation Render Loop ---
-  const startTime = performance.now();
-  const animate = () => {
+  const clock = new THREE.Clock();
+  function animate() {
     requestAnimationFrame(animate);
-    const elapsedSeconds = (performance.now() - startTime) / 1000;
+    const elapsed = clock.getElapsedTime();
     controls.update();
-    if (onFrame) {
-      onFrame(elapsedSeconds);
+    if (onAnimate) {
+      onAnimate(elapsed);
     }
     renderer.render(scene, camera);
-  };
+  }
   animate();
 
   return {
@@ -226,10 +126,102 @@ export function createScene(
     camera,
     renderer,
     controls,
-    container,
-    keyLight,
-    fillLight,
+    dirLight,
     ambientLight,
+    rimLight,
+    fillLight,
+    updateSeasonLighting: setSeasonLighting,
     setSeasonLighting,
   };
+}
+
+function setupTeaTableAndPot(scene: THREE.Scene): void {
+  // 1. 实木茶几桌面 (沉香木质感)
+  const tableGeom = new THREE.CylinderGeometry(1.6, 1.7, 0.1, 48);
+  const tableMat = new THREE.MeshStandardMaterial({
+    color: 0x1f1b18,
+    roughness: 0.55,
+    metalness: 0.15,
+  });
+  const table = new THREE.Mesh(tableGeom, tableMat);
+  table.position.y = -0.05;
+  table.receiveShadow = true;
+  scene.add(table);
+
+  // 2. 宜兴紫砂名盆 (深红紫泥，八角带足)
+  const potOuterGeom = new THREE.CylinderGeometry(0.72, 0.58, 0.28, 8);
+  const potMat = new THREE.MeshStandardMaterial({
+    color: 0x4a2e2b,
+    roughness: 0.78,
+    metalness: 0.08,
+  });
+  const pot = new THREE.Mesh(potOuterGeom, potMat);
+  pot.position.y = 0.14;
+  pot.castShadow = true;
+  pot.receiveShadow = true;
+  scene.add(pot);
+
+  const rimGeom = new THREE.TorusGeometry(0.73, 0.025, 8, 8);
+  rimGeom.rotateX(Math.PI / 2);
+  const rim = new THREE.Mesh(rimGeom, potMat);
+  rim.position.y = 0.28;
+  scene.add(rim);
+
+  for (let i = 0; i < 4; i++) {
+    const angle = (i * Math.PI) / 2 + Math.PI / 4;
+    const footGeom = new THREE.BoxGeometry(0.1, 0.08, 0.1);
+    const foot = new THREE.Mesh(footGeom, potMat);
+    foot.position.set(Math.cos(angle) * 0.52, 0.04, Math.sin(angle) * 0.52);
+    foot.castShadow = true;
+    scene.add(foot);
+  }
+
+  // 3. 湿润赤玉土与青苔
+  const soilGeom = new THREE.CylinderGeometry(0.68, 0.68, 0.02, 32);
+  const soilMat = new THREE.MeshStandardMaterial({
+    color: 0x3d2817,
+    roughness: 0.95,
+  });
+  const soil = new THREE.Mesh(soilGeom, soilMat);
+  soil.position.y = 0.25;
+  soil.receiveShadow = true;
+  scene.add(soil);
+
+  const mossMat = new THREE.MeshStandardMaterial({
+    color: 0x3c5c24,
+    roughness: 0.9,
+    flatShading: true,
+  });
+  for (let i = 0; i < 7; i++) {
+    const angle = (i * Math.PI * 2) / 7 + Math.random() * 0.3;
+    const dist = 0.18 + Math.random() * 0.32;
+    const mossGeom = new THREE.SphereGeometry(0.08 + Math.random() * 0.06, 8, 6);
+    mossGeom.scale(1.4, 0.35, 1.2);
+    const moss = new THREE.Mesh(mossGeom, mossMat);
+    moss.position.set(Math.cos(angle) * dist, 0.26, Math.sin(angle) * dist);
+    moss.receiveShadow = true;
+    scene.add(moss);
+  }
+
+  // 4. 八方根盘 (Nebari) 抓地气根
+  const rootMat = new THREE.MeshStandardMaterial({
+    color: 0x3d2e24,
+    roughness: 0.88,
+  });
+  for (let i = 0; i < 6; i++) {
+    const angle = (i * Math.PI * 2) / 6 + (Math.random() - 0.5) * 0.3;
+    const rootLen = 0.25 + Math.random() * 0.1;
+    const rootGeom = new THREE.CylinderGeometry(0.02, 0.05, rootLen, 6);
+    const root = new THREE.Mesh(rootGeom, rootMat);
+    root.position.set(
+      Math.cos(angle) * (rootLen * 0.45),
+      0.26,
+      Math.sin(angle) * (rootLen * 0.45)
+    );
+    root.rotation.z = Math.cos(angle) * 0.65;
+    root.rotation.x = -Math.sin(angle) * 0.65;
+    root.castShadow = true;
+    root.receiveShadow = true;
+    scene.add(root);
+  }
 }
