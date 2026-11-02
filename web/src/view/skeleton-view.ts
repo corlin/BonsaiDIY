@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { FoliageGenerator } from './foliage-generator';
+import { createOakLeafAtlas } from './oak-leaf-texture';
+import { createAgedOakBarkMaterial } from './bark-material';
 
 export interface TreeSegmentRenderData {
   id: number;
@@ -11,14 +12,15 @@ export interface TreeSegmentRenderData {
 
 export class TreeRenderer {
   private barkMaterial: THREE.MeshStandardMaterial;
-  private foliageGen: FoliageGenerator;
+  private leafMaterial: THREE.MeshStandardMaterial;
   public treeGroup: THREE.Group;
   public foliageGroup: THREE.Group;
   private segmentMeshes: Map<number, THREE.Mesh> = new Map();
   private interactiveMeshes: THREE.Mesh[] = [];
   private isSkeletonMode = false;
-  private hoveredMesh: THREE.Mesh | null = null;
   private evidenceSegmentId: number | null = null;
+  private hoveredSegmentId: number | null = null;
+  private currentSeason = 'Spring';
 
   private readonly orderColors: number[] = [
     0xef4444, // 0: 主干 (朱红)
@@ -32,17 +34,24 @@ export class TreeRenderer {
     this.treeGroup = new THREE.Group();
     this.foliageGroup = new THREE.Group();
     this.treeGroup.add(this.foliageGroup);
-    this.foliageGen = new FoliageGenerator();
 
     if (scene) {
       scene.add(this.treeGroup);
     }
 
-    this.barkMaterial = new THREE.MeshStandardMaterial({
-      color: 0x4f3728,
-      roughness: 0.82,
-      metalness: 0.05,
-      flatShading: false,
+    // 1. 真实古老夏栎苍劲皲裂鳞片树皮材质
+    this.barkMaterial = createAgedOakBarkMaterial();
+
+    // 2. 真实夏栎波浪圆齿羽裂单叶半透明材质
+    const { texture: leafTex, alphaTest } = createOakLeafAtlas();
+    this.leafMaterial = new THREE.MeshStandardMaterial({
+      map: leafTex,
+      transparent: true,
+      alphaTest: alphaTest,
+      roughness: 0.52,
+      metalness: 0.02,
+      side: THREE.DoubleSide,
+      shadowSide: THREE.DoubleSide,
     });
   }
 
@@ -64,35 +73,114 @@ export class TreeRenderer {
     while (this.foliageGroup.children.length > 0) {
       const child = this.foliageGroup.children[0];
       this.foliageGroup.remove(child);
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+      }
     }
     this.treeGroup.add(this.foliageGroup);
 
     const segments = this.parseSegmentsBuffer(buffer);
 
+    // 1. 构建树干与枝条几何网格
     for (const seg of segments) {
       const mesh = this.createSegmentMesh(seg);
       this.segmentMeshes.set(seg.id, mesh);
       this.interactiveMeshes.push(mesh);
       this.treeGroup.add(mesh);
 
-      // 分叉接缝平滑过渡
-      const jointGeom = new THREE.SphereGeometry(seg.radius * 1.02, 16, 16);
+      // 分叉节点接缝圆润过渡（消除生硬圆柱棱角，呈现天然连贯木质躯干）
+      const jointGeom = new THREE.SphereGeometry(seg.radius * 1.04, 16, 16);
       const joint = new THREE.Mesh(jointGeom, this.barkMaterial);
       joint.position.copy(seg.start);
       joint.userData = { isJoint: true, segmentId: seg.id, order: seg.order };
       joint.castShadow = true;
+      joint.receiveShadow = true;
       this.interactiveMeshes.push(joint);
       this.treeGroup.add(joint);
 
-      // 只有 Order >= 2 的细分末端枝条才点缀轻盈小云片
+      // 主干基底膨大膨出根盘 Collar (Bulbous Fluted Base)
+      if (seg.order === 0 && seg.id === 0) {
+        const baseFluteGeom = new THREE.CylinderGeometry(seg.radius * 1.02, seg.radius * 1.45, 0.12, 24);
+        const baseFlute = new THREE.Mesh(baseFluteGeom, this.barkMaterial);
+        baseFlute.position.set(seg.start.x, seg.start.y - 0.05, seg.start.z);
+        baseFlute.castShadow = true;
+        baseFlute.receiveShadow = true;
+        this.treeGroup.add(baseFlute);
+      }
+
+      // 仅在分枝侧枝与梢头（order >= 2）挂载“透风露骨”的横向羽裂单叶枝托云片
       if (seg.order >= 2) {
-        const cloudScale = Math.min(0.12, Math.max(0.05, seg.radius * 2.5));
-        const foliageCloud = this.foliageGen.createFoliageCloud(seg.end, cloudScale);
-        this.foliageGroup.add(foliageCloud);
+        this.attachOakFoliagePad(seg);
       }
     }
 
     this.applyDisplayMode();
+    this.applySeasonColors();
+  }
+
+  /**
+   * 1:1 还原参考图中的“水平微拱分层枝托云片 (Stratified Foliage Pads)”：
+   * 由 18~28 片具有独立 3D 姿态与向上迎光仰角的夏栎波浪羽裂单叶自然重叠错落，
+   * 严格保留 35%~40% 的透光天窗留白，内堂主干与主枝 100% 露在外面，透光通气。
+   */
+  private attachOakFoliagePad(seg: TreeSegmentRenderData): void {
+    const isTerminal = seg.order >= 3;
+    const leafCount = isTerminal ? 24 : 18;
+    const padRadiusX = isTerminal ? 0.22 : 0.18;
+    const padRadiusZ = isTerminal ? 0.16 : 0.14;
+
+    const branchDir = new THREE.Vector3().subVectors(seg.end, seg.start);
+    const branchNorm = branchDir.clone().normalize();
+
+    // 枝托中心位于梢头略偏外侧
+    const padCenter = seg.end.clone().addScaledVector(branchNorm, 0.03);
+
+    // 水平法向基向量 (构建横向平展枝托平面)
+    const up = new THREE.Vector3(0, 1, 0);
+    let right = new THREE.Vector3().crossVectors(branchNorm, up).normalize();
+    if (right.lengthSq() < 0.01) {
+      right = new THREE.Vector3(1, 0, 0);
+    }
+    const forward = new THREE.Vector3().crossVectors(right, up).normalize();
+
+    // 单叶基准尺寸 (夏栎单叶真实比例)
+    const leafWidth = 0.082;
+    const leafLength = 0.135;
+
+    for (let i = 0; i < leafCount; i++) {
+      // 沿椭圆枝托微拱分布 (中心略高、边缘微垂)
+      const angle = (i * Math.PI * 2) / leafCount + (Math.random() - 0.5) * 0.45;
+      const distRatio = Math.sqrt(Math.random()) * 0.85 + 0.15; // 边缘偏多，中心疏朗
+      const offsetX = Math.cos(angle) * padRadiusX * distRatio;
+      const offsetZ = Math.sin(angle) * padRadiusZ * distRatio;
+      const offsetY = -Math.pow(distRatio, 2) * 0.025 + (Math.random() - 0.5) * 0.02;
+
+      // 单叶几何体 (叶柄位于网格底端原点，便于沿叶柄旋转)
+      const geom = new THREE.PlaneGeometry(leafWidth, leafLength);
+      geom.translate(0, leafLength * 0.5, 0);
+
+      const leafMesh = new THREE.Mesh(geom, this.leafMaterial);
+
+      // 3D 绝对空间位置
+      const leafPos = padCenter.clone()
+        .addScaledVector(right, offsetX)
+        .addScaledVector(forward, offsetZ)
+        .add(new THREE.Vector3(0, offsetY, 0));
+      leafMesh.position.copy(leafPos);
+
+      // 单叶 3D 朝向：叶尖向外展开，叶面朝上仰天迎向日光 (仰角 15°~35°)
+      leafMesh.lookAt(leafPos.clone().add(new THREE.Vector3(offsetX * 1.5, 0.18, offsetZ * 1.5)));
+      leafMesh.rotateX(Math.PI / 2 - 0.35 + (Math.random() - 0.5) * 0.3);
+      leafMesh.rotateZ((Math.random() - 0.5) * 0.35);
+
+      // 轻微大小随机扰动
+      const scale = 0.88 + Math.random() * 0.28;
+      leafMesh.scale.set(scale, scale, scale);
+
+      leafMesh.castShadow = true;
+      leafMesh.receiveShadow = true;
+      this.foliageGroup.add(leafMesh);
+    }
   }
 
   private createSegmentMesh(seg: TreeSegmentRenderData): THREE.Mesh {
@@ -100,8 +188,9 @@ export class TreeRenderer {
     const len = dir.length();
     const normDir = dir.clone().normalize();
 
+    // 自然渐进收尖 (Tapering)
     const radiusBottom = seg.radius;
-    const radiusTop = seg.radius * 0.82;
+    const radiusTop = seg.radius * (seg.order === 0 ? 0.88 : 0.82);
     const geom = new THREE.CylinderGeometry(radiusTop, radiusBottom, len, 20);
 
     const mesh = new THREE.Mesh(geom, this.barkMaterial.clone());
@@ -162,8 +251,37 @@ export class TreeRenderer {
     return this.isSkeletonMode;
   }
 
+  public setSeason(season: string): void {
+    this.currentSeason = season;
+    this.applySeasonColors();
+  }
+
+  private applySeasonColors(): void {
+    if (this.currentSeason === 'Winter') {
+      // 冬季落叶尽净，完美展现“寒林裸骨 (Winter Silhouette)”
+      this.foliageGroup.visible = false;
+    } else {
+      this.foliageGroup.visible = !this.isSkeletonMode;
+      switch (this.currentSeason) {
+        case 'Spring':
+          this.leafMaterial.color.setHex(0x62a835); // 嫩绿初芽
+          break;
+        case 'Summer':
+          this.leafMaterial.color.setHex(0x408220); // 浓密苍翠
+          break;
+        case 'Autumn':
+          this.leafMaterial.color.setHex(0xb56d1c); // 温暖金褐红
+          break;
+      }
+    }
+  }
+
   private applyDisplayMode(): void {
-    this.foliageGroup.visible = !this.isSkeletonMode;
+    if (this.currentSeason === 'Winter') {
+      this.foliageGroup.visible = false;
+    } else {
+      this.foliageGroup.visible = !this.isSkeletonMode;
+    }
 
     for (const mesh of this.segmentMeshes.values()) {
       if (this.isSkeletonMode) {
@@ -179,54 +297,44 @@ export class TreeRenderer {
     }
   }
 
+  public setEvidenceHighlight(segmentId: number | null): void {
+    this.evidenceSegmentId = segmentId;
+    if (segmentId === null) {
+      this.applyDisplayMode();
+    }
+  }
+
+  public highlightSegment(segmentId: number | null): void {
+    if (this.hoveredSegmentId === segmentId) return;
+    this.hoveredSegmentId = segmentId;
+    if (segmentId !== null && this.evidenceSegmentId === null) {
+      const mesh = this.segmentMeshes.get(segmentId);
+      if (mesh && mesh.material instanceof THREE.MeshStandardMaterial) {
+        mesh.material.emissive.setHex(0x332211);
+      }
+    } else if (segmentId === null && this.evidenceSegmentId === null) {
+      this.applyDisplayMode();
+    }
+  }
+
   public getEvidenceHighlight(): number | null {
     return this.evidenceSegmentId;
   }
 
-  public setEvidenceHighlight(segmentId: number | null): void {
-    if (this.evidenceSegmentId && this.evidenceSegmentId !== segmentId) {
-      const prev = this.segmentMeshes.get(this.evidenceSegmentId);
-      if (prev && prev.material instanceof THREE.MeshStandardMaterial) {
-        prev.material.emissive.setHex(0x000000);
-        prev.material.emissiveIntensity = 0;
-      }
-    }
-    this.evidenceSegmentId = segmentId;
-  }
-
-  public highlightSegment(segmentId: number | null): void {
-    if (segmentId === null) {
-      this.setHover(null);
-      return;
-    }
-    const mesh = this.segmentMeshes.get(segmentId);
-    this.setHover(mesh || null);
-  }
-
-  public updatePulse(timeSeconds: number): void {
-    if (!this.evidenceSegmentId) return;
+  public updatePulse(elapsedSeconds: number): void {
+    if (this.evidenceSegmentId === null) return;
     const mesh = this.segmentMeshes.get(this.evidenceSegmentId);
     if (!mesh) return;
 
-    const pulse = 0.5 + 0.5 * Math.sin(timeSeconds * 6.0);
+    // 正弦波脉冲红橙光辉 (0.65 +/- 0.35 * sin(8t))
+    const pulse = 0.65 + 0.35 * Math.sin(elapsedSeconds * 8.0);
+    const pulseColor = new THREE.Color(1.0, 0.25 * pulse, 0.05);
+
     if (mesh.material instanceof THREE.MeshStandardMaterial) {
-      mesh.material.emissive.setHex(0xef4444);
-      mesh.material.emissiveIntensity = 0.4 + pulse * 1.2;
-    }
-  }
-
-  public setHover(mesh: THREE.Mesh | null): void {
-    if (this.hoveredMesh === mesh) return;
-
-    if (this.hoveredMesh && this.hoveredMesh.material instanceof THREE.MeshStandardMaterial) {
-      this.hoveredMesh.material.emissive.setHex(0x000000);
-      this.hoveredMesh.material.emissiveIntensity = 0;
-    }
-
-    this.hoveredMesh = mesh;
-    if (this.hoveredMesh && this.hoveredMesh.material instanceof THREE.MeshStandardMaterial) {
-      this.hoveredMesh.material.emissive.setHex(0x38bdf8);
-      this.hoveredMesh.material.emissiveIntensity = 0.6;
+      mesh.material.emissive = pulseColor;
+      mesh.material.emissiveIntensity = pulse * 1.5;
+    } else if (mesh.material instanceof THREE.MeshBasicMaterial) {
+      mesh.material.color = pulseColor;
     }
   }
 }

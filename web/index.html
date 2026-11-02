@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bonsai Dojo - Interactive Bonsai Engine</title>
+  <title>Bonsai Dojo 树境·盆景道 | 典藏物理与造形工作室</title>
   <style>
     * {
       box-sizing: border-box;
@@ -15,9 +15,9 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background-color: #1a1e22;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      color: #e2e8f0;
+      background-color: #f2f0eb;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      color: #2b2622;
     }
     #canvas-container {
       position: absolute;
@@ -28,415 +28,296 @@
       display: block;
       z-index: 1;
     }
+    /* 典雅极简悬浮半透玻璃面板 */
+    .hud-card {
+      background: rgba(255, 255, 255, 0.85);
+      border: 1px solid rgba(220, 215, 205, 0.85);
+      border-radius: 14px;
+      padding: 16px 20px;
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      box-shadow: 0 10px 32px rgba(60, 45, 30, 0.08);
+      z-index: 10;
+      pointer-events: auto;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .hud-card.collapsed {
+      max-height: 48px !important;
+      overflow: hidden !important;
+      padding: 10px 16px !important;
+      opacity: 0.85;
+    }
+    .hud-card.collapsed .collapsible-content {
+      display: none !important;
+    }
     #hud-panel {
       position: absolute;
       top: 24px;
       left: 24px;
-      z-index: 10;
-      width: 320px;
-      background: rgba(18, 22, 28, 0.75);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      width: 290px;
     }
-    .hud-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      padding-bottom: 10px;
-    }
-    .hud-header h1 {
-      font-size: 1.15rem;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      color: #f8fafc;
-    }
-    .hud-header .badge {
-      font-size: 0.75rem;
-      font-weight: 500;
-      background: rgba(34, 197, 94, 0.2);
-      color: #4ade80;
-      border: 1px solid rgba(74, 222, 128, 0.3);
-      padding: 3px 8px;
-      border-radius: 6px;
-      letter-spacing: 0.5px;
-      white-space: nowrap;
-      transition: all 0.3s ease;
-    }
-    .badge.season-spring {
-      background: rgba(34, 197, 94, 0.2);
-      color: #4ade80;
-      border-color: rgba(74, 222, 128, 0.35);
-    }
-    .badge.season-summer {
-      background: rgba(234, 179, 8, 0.2);
-      color: #facc15;
-      border-color: rgba(250, 204, 21, 0.35);
-    }
-    .badge.season-autumn {
-      background: rgba(249, 115, 22, 0.2);
-      color: #fb923c;
-      border-color: rgba(251, 146, 60, 0.35);
-    }
-    .badge.season-winter {
-      background: rgba(56, 189, 248, 0.2);
-      color: #38bdf8;
-      border-color: rgba(56, 189, 248, 0.35);
-    }
-    .energy-section {
-      margin-bottom: 14px;
-      background: rgba(0, 0, 0, 0.25);
-      border-radius: 8px;
-      padding: 10px 12px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    .energy-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 0.75rem;
-      color: #94a3b8;
-      margin-bottom: 6px;
-    }
-    .energy-track {
-      width: 100%;
-      height: 8px;
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 4px;
-      overflow: hidden;
-      position: relative;
-    }
-    .energy-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #10b981 0%, #06b6d4 100%);
-      border-radius: 4px;
-      transition: width 0.4s ease, background 0.4s ease;
-    }
-    .energy-fill.low {
-      background: linear-gradient(90deg, #ef4444 0%, #f59e0b 100%);
-    }
-    .hud-controls {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-bottom: 16px;
-    }
-    .btn {
-      cursor: pointer;
-      border: none;
-      border-radius: 8px;
-      padding: 10px 14px;
-      font-size: 0.85rem;
-      font-weight: 500;
-      transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-    }
-    .btn-grow {
-      background: linear-gradient(135deg, #059669 0%, #0d9488 100%);
-      color: #ffffff;
-      box-shadow: 0 2px 10px rgba(13, 148, 136, 0.3);
-      font-weight: 600;
-    }
-    .btn-grow:hover {
-      background: linear-gradient(135deg, #047857 0%, #0f766e 100%);
-      transform: translateY(-1px);
-      box-shadow: 0 4px 14px rgba(13, 148, 136, 0.4);
-    }
-    .btn-grow:active {
-      transform: translateY(0);
-    }
-    .btn-primary {
-      background: #2563eb;
-      color: #ffffff;
-      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
-    }
-    .btn-primary:hover {
-      background: #1d4ed8;
-      transform: translateY(-1px);
-    }
-    .btn-primary:active {
-      transform: translateY(0);
-    }
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.08);
-      color: #cbd5e1;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-    }
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.14);
-      color: #ffffff;
-      transform: translateY(-1px);
-    }
-    .btn-secondary:active {
-      transform: translateY(0);
-    }
-    .btn.active {
-      background: #059669;
-      color: #ffffff;
-      border-color: #10b981;
-      box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
-    }
-    #stats {
-      font-size: 0.8rem;
-      line-height: 1.6;
-      color: #94a3b8;
-      background: rgba(0, 0, 0, 0.25);
-      border-radius: 8px;
-      padding: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    #stats .stat-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 4px;
-    }
-    #stats .stat-val {
-      color: #f1f5f9;
-      font-weight: 600;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    }
-    .hud-tip {
-      margin-top: 10px;
-      font-size: 0.75rem;
-      color: #64748b;
-      line-height: 1.4;
-    }
-    .hud-tip span {
-      color: #38bdf8;
-    }
-
-    /* --- Coach Diagnostics Panel (Top-Right) --- */
     #coach-panel {
       position: absolute;
       top: 24px;
       right: 24px;
-      z-index: 10;
-      width: 360px;
+      width: 320px;
       max-height: calc(100vh - 48px);
       overflow-y: auto;
-      background: rgba(18, 22, 28, 0.82);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
     }
-    .coach-header {
-      display: flex;
+    .badge {
+      display: inline-flex;
       align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      padding-bottom: 10px;
-    }
-    .coach-title-wrap h2 {
-      font-size: 1.05rem;
+      padding: 3px 9px;
+      border-radius: 9999px;
+      font-size: 12px;
       font-weight: 600;
-      color: #f8fafc;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.02em;
     }
-    .coach-subtitle {
-      font-size: 0.7rem;
-      color: #94a3b8;
-    }
+    .season-spring { background: #eaf4e2; color: #3a721c; border: 1px solid #c2e2ab; }
+    .season-summer { background: #e5f5fa; color: #0284c7; border: 1px solid #bae6fd; }
+    .season-autumn { background: #fdf2e9; color: #c25e1a; border: 1px solid #fed7aa; }
+    .season-winter { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    
     .coach-pill {
-      font-size: 0.7rem;
+      font-size: 11px;
       font-weight: 600;
       padding: 2px 8px;
-      border-radius: 12px;
-      letter-spacing: 0.5px;
+      border-radius: 999px;
     }
-    .pill-ok {
-      background: rgba(34, 197, 94, 0.2);
-      color: #4ade80;
-      border: 1px solid rgba(74, 222, 128, 0.3);
-    }
-    .pill-warning {
-      background: rgba(245, 158, 11, 0.2);
-      color: #fbbf24;
-      border: 1px solid rgba(251, 191, 36, 0.3);
-    }
-    .pill-danger {
-      background: rgba(239, 68, 68, 0.2);
-      color: #f87171;
-      border: 1px solid rgba(248, 113, 113, 0.3);
-    }
-    .coach-issues-list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .coach-card {
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 8px;
-      padding: 12px;
-      border-left: 3px solid #3b82f6;
-      border-top: 1px solid rgba(255, 255, 255, 0.05);
-      border-right: 1px solid rgba(255, 255, 255, 0.05);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      transition: all 0.2s ease;
+    .pill-ok { background: #eaf4e2; color: #3a721c; border: 1px solid #c2e2ab; }
+    .pill-warning { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+    .pill-danger { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+
+    .panel-toggle-btn {
+      background: none;
+      border: none;
+      font-size: 14px;
       cursor: pointer;
+      color: #786f66;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: background 0.15s ease;
     }
-    .coach-card:hover {
-      background: rgba(255, 255, 255, 0.05);
-      transform: translateX(-2px);
+    .panel-toggle-btn:hover {
+      background: rgba(0,0,0,0.06);
+      color: #2b2622;
     }
-    .coach-card.severity-Danger {
-      border-left-color: #ef4444;
+
+    .btn {
+      width: 100%;
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      margin-bottom: 8px;
     }
-    .coach-card.severity-Warning {
-      border-left-color: #f59e0b;
+    .btn-primary {
+      background: #3a721c;
+      color: #fff;
+      border: 1px solid #2f5e16;
+      box-shadow: 0 2px 8px rgba(58, 114, 28, 0.25);
     }
-    .coach-card.severity-Info {
-      border-left-color: #10b981;
+    .btn-primary:hover { background: #448621; }
+    .btn-secondary {
+      background: #fdfcf9;
+      color: #4a3e35;
+      border: 1px solid #ded8ce;
     }
+    .btn-secondary:hover { background: #f3efe8; border-color: #cbbead; }
+    .btn-secondary.active {
+      background: #eef2ff;
+      border-color: #a5b4fc;
+      color: #4338ca;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #6c635b;
+      margin-bottom: 6px;
+    }
+    .stat-val { font-weight: 600; color: #2e2824; }
+    .progress-bar-bg {
+      width: 100%;
+      height: 6px;
+      background: #e8e2d8;
+      border-radius: 999px;
+      overflow: hidden;
+      margin: 6px 0 14px 0;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: #3a721c;
+      width: 100%;
+      transition: width 0.3s ease;
+    }
+    .progress-bar-fill.low { background: #e11d48; }
+
+    /* 教练审计卡片 */
+    .coach-card {
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      border: 1px solid #e8e2d8;
+      font-size: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    }
+    .coach-card.severity-Danger { border-left: 4px solid #ef4444; }
+    .coach-card.severity-Warning { border-left: 4px solid #f59e0b; }
+    .coach-card.severity-Info { border-left: 4px solid #22c55e; }
     .card-top {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
     .rule-tag {
-      font-size: 0.72rem;
-      font-family: ui-monospace, monospace;
-      font-weight: 600;
-      color: #cbd5e1;
+      font-family: monospace;
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
     }
     .severity-badge {
-      font-size: 0.65rem;
-      font-weight: 600;
+      font-size: 10px;
       padding: 1px 6px;
-      border-radius: 4px;
+      border-radius: 999px;
+      font-weight: 600;
     }
-    .severity-badge.Danger {
-      background: rgba(239, 68, 68, 0.25);
-      color: #fca5a5;
-    }
-    .severity-badge.Warning {
-      background: rgba(245, 158, 11, 0.25);
-      color: #fde68a;
-    }
-    .severity-badge.Info {
-      background: rgba(16, 185, 129, 0.25);
-      color: #a7f3d0;
-    }
+    .severity-badge.Danger { background: #fee2e2; color: #991b1b; }
+    .severity-badge.Warning { background: #fef3c7; color: #92400e; }
+    .severity-badge.Info { background: #dcfce7; color: #166534; }
     .card-detail {
-      font-size: 0.78rem;
-      color: #cbd5e1;
+      font-size: 12px;
+      color: #334155;
       line-height: 1.45;
+      margin-bottom: 6px;
     }
     .card-evidence-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      margin-top: 8px;
-      font-size: 0.7rem;
-      color: #38bdf8;
-      background: rgba(56, 189, 248, 0.1);
-      border: 1px solid rgba(56, 189, 248, 0.25);
-      border-radius: 4px;
-      padding: 3px 7px;
+      width: 100%;
+      padding: 4px 8px;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #475569;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: all 0.15s ease;
     }
     .card-evidence-btn:hover {
-      background: rgba(56, 189, 248, 0.2);
+      background: #f1f5f9;
+      border-color: #94a3b8;
+      color: #0f172a;
     }
     .coach-empty {
-      font-size: 0.8rem;
-      color: #94a3b8;
       text-align: center;
-      padding: 20px 0;
-      line-height: 1.5;
+      padding: 24px 12px;
+      color: #64748b;
+      font-size: 13px;
     }
     .coach-empty-icon {
-      font-size: 1.6rem;
-      margin-bottom: 8px;
+      font-size: 28px;
+      margin-bottom: 6px;
+    }
+
+    #tips {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid rgba(220, 215, 205, 0.85);
+      border-radius: 30px;
+      padding: 7px 20px;
+      font-size: 12px;
+      color: #5c534a;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+      pointer-events: none;
+      z-index: 10;
     }
   </style>
 </head>
 <body>
   <div id="canvas-container"></div>
 
-  <!-- HUD Control Panel (Left) -->
-  <div id="hud-panel">
-    <div class="hud-header">
-      <h1>Bonsai Dojo 盆栽道場</h1>
-      <span id="season-badge" class="badge season-spring">春 · 第 1 年</span>
+  <!-- 左侧控制台 -->
+  <div id="hud-panel" class="hud-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <h3 style="font-size: 15px; font-weight: 700; color: #2e2824; letter-spacing: -0.01em;">Bonsai Dojo 盆景道</h3>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span id="season-badge" class="badge season-spring">春 · 第 1 年</span>
+        <button id="btn-toggle-hud" class="panel-toggle-btn" title="折叠/展开面板">− / ＋</button>
+      </div>
     </div>
 
-    <!-- Energy Pool Bar -->
-    <div class="energy-section">
-      <div class="energy-header">
-        <span>能量池 (Energy Pool)</span>
+    <div class="collapsible-content">
+      <div class="stat-row">
+        <span>能量池蓄积 (Energy Pool)</span>
         <span id="stat-energy" class="stat-val">100.0</span>
       </div>
-      <div class="energy-track">
-        <div id="energy-bar" class="energy-fill" style="width: 100%;"></div>
+      <div class="progress-bar-bg">
+        <div id="energy-bar" class="progress-bar-fill"></div>
       </div>
-    </div>
 
-    <!-- Controls -->
-    <div class="hud-controls">
-      <button id="btn-grow-season" class="btn btn-grow">
-        <span>🌱</span> 推进生长季 (Advance Season)
+      <button id="btn-grow-season" class="btn btn-primary">
+        <span>🌱 推进生长季 (Advance Season)</span>
       </button>
       <button id="btn-toggle-skeleton" class="btn btn-secondary">
-        Toggle Skeleton View (骨架透视)
+        <span>透视骨架 / 真实树貌</span>
       </button>
-      <button id="btn-reset" class="btn btn-primary">
-        Reset Bonsai (重置树形)
+      <button id="btn-reset" class="btn btn-secondary" style="margin-bottom: 14px;">
+        <span>重置盆景 (Reset Bonsai)</span>
       </button>
-    </div>
 
-    <!-- Stats -->
-    <div id="stats">
-      <div class="stat-row">
-        <span>Segments (枝段数):</span>
-        <span id="stat-segments" class="stat-val">0</span>
+      <div style="border-top: 1px solid #e8e2d8; padding-top: 10px;">
+        <div class="stat-row">
+          <span>枝段总数 (Segments)</span>
+          <span id="stat-segments" class="stat-val">35</span>
+        </div>
+        <div class="stat-row">
+          <span>树龄年轮 (Tree Age)</span>
+          <span id="stat-age" class="stat-val">第 1 年</span>
+        </div>
+        <div class="stat-row">
+          <span>累积修剪量 (Total Pruned)</span>
+          <span id="stat-pruned" class="stat-val">0</span>
+        </div>
+        <div class="stat-row">
+          <span>渲染外观 (Render Mode)</span>
+          <span id="stat-mode" class="stat-val">Organic Trunk</span>
+        </div>
       </div>
-      <div class="stat-row">
-        <span>Pruned Total (累计修剪):</span>
-        <span id="stat-pruned" class="stat-val">0</span>
-      </div>
-      <div class="stat-row">
-        <span>Tree Age (树龄):</span>
-        <span id="stat-age" class="stat-val">第 1 年</span>
-      </div>
-      <div class="stat-row">
-        <span>Rendering Mode:</span>
-        <span id="stat-mode" class="stat-val">Organic Trunk</span>
-      </div>
-    </div>
-
-    <div class="hud-tip">
-      * Click on branch to <span>prune (修剪)</span>.<br/>
-      * Click <span>推进生长季</span> to simulate seasonal flush.<br/>
-      * Left drag rotate, right drag pan, wheel zoom.
     </div>
   </div>
 
-  <!-- Bonsai Coach Diagnostics Panel (Right) -->
-  <div id="coach-panel">
-    <div class="coach-header">
-      <div class="coach-title-wrap">
-        <h2>盆栽教练诊断</h2>
-        <span class="coach-subtitle">Wiki 比例与造型实时审计</span>
+  <!-- 右侧教练审计诊断面板 -->
+  <div id="coach-panel" class="hud-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+      <h4 style="font-size: 14px; font-weight: 700; color: #2e2824;">盆景流派与健康教练</h4>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span id="coach-status-pill" class="coach-pill pill-ok">平衡良好</span>
+        <button id="btn-toggle-coach" class="panel-toggle-btn" title="折叠/展开面板">− / ＋</button>
       </div>
-      <span id="coach-status-pill" class="coach-pill pill-ok">平衡良好</span>
     </div>
-    <div id="coach-issues-list" class="coach-issues-list">
-      <!-- Populated dynamically by main.ts -->
+    <div class="collapsible-content">
+      <p style="font-size: 11px; color: #786f66; margin-bottom: 10px;">Wiki 比例与造型准则实时审计</p>
+      <div id="coach-issues-list">
+        <!-- 动态插入诊断卡片 -->
+      </div>
     </div>
+  </div>
+
+  <div id="tips">
+    🖱️ 点击枝条执行精准修剪 · 左键拖拽 360° 鉴赏 · 右键平移 · 滚轮缩放
   </div>
 
   <script type="module" src="/src/main.ts"></script>

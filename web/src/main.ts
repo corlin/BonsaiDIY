@@ -76,6 +76,21 @@ async function bootstrap() {
   const statMode = document.getElementById('stat-mode');
   const coachIssuesList = document.getElementById('coach-issues-list');
   const coachStatusPill = document.getElementById('coach-status-pill');
+  const hudPanel = document.getElementById('hud-panel');
+  const coachPanel = document.getElementById('coach-panel');
+  const btnToggleHud = document.getElementById('btn-toggle-hud');
+  const btnToggleCoach = document.getElementById('btn-toggle-coach');
+
+  if (btnToggleHud && hudPanel) {
+    btnToggleHud.addEventListener('click', () => {
+      hudPanel.classList.toggle('collapsed');
+    });
+  }
+  if (btnToggleCoach && coachPanel) {
+    btnToggleCoach.addEventListener('click', () => {
+      coachPanel.classList.toggle('collapsed');
+    });
+  }
 
   /**
    * Updates Coach Diagnostics Panel with real-time rule audit issues
@@ -199,6 +214,7 @@ async function bootstrap() {
       seasonBadge.className = `badge season-${info.season.toLowerCase()}`;
     }
     sceneContext.setSeasonLighting(info.season);
+    treeRenderer.setSeason(info.season);
 
     // 2. Update Energy Pool Progress Bar
     const energyClamped = Math.max(0, Math.min(100, info.energy_pool));

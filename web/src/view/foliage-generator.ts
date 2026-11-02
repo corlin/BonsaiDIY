@@ -1,52 +1,98 @@
 import * as THREE from 'three';
 
 export class FoliageGenerator {
+  private leafTexture: THREE.CanvasTexture;
   private leafMaterial: THREE.MeshStandardMaterial;
 
   constructor() {
-    // 东方盆景松柏/榆树经典云片：温润翡翠墨绿，带微透光与柔和高光
+    this.leafTexture = this.createFoliageTexture();
     this.leafMaterial = new THREE.MeshStandardMaterial({
-      color: 0x224929,
-      roughness: 0.55,
-      metalness: 0.08,
-      flatShading: false, // 彻底关闭硬边破碎多边形，使用平滑法线
+      map: this.leafTexture,
+      transparent: true,
+      alphaTest: 0.25,
+      roughness: 0.6,
+      metalness: 0.05,
       side: THREE.DoubleSide,
+      color: 0x5b8c46, // 榆树清透温润的嫩绿
+      shadowSide: THREE.DoubleSide,
     });
   }
 
   /**
-   * 在末梢细枝生成轻盈、小巧、扁平透光的云片微托 (Bonsai Foliage Cloud)
+   * 动态生成真实的细密小榆树叶片纹理贴图（透明通道带锯齿边缘与叶脉）
    */
-  public createFoliageCloud(center: THREE.Vector3, scale = 0.1): THREE.Group {
+  private createFoliageTexture(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
+
+    ctx.clearRect(0, 0, 256, 256);
+
+    // 绘制若干簇优雅交错的单片小叶子
+    const leafCount = 14;
+    for (let i = 0; i < leafCount; i++) {
+      const angle = (i * Math.PI * 2) / leafCount;
+      const dist = 35 + Math.random() * 50;
+      const cx = 128 + Math.cos(angle) * dist;
+      const cy = 128 + Math.sin(angle) * dist;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle + Math.PI / 2 + (Math.random() - 0.5) * 0.4);
+
+      // 绘制带叶尖与微锯齿的榆树叶片
+      ctx.beginPath();
+      ctx.moveTo(0, -22);
+      ctx.bezierCurveTo(14, -14, 15, 12, 0, 22);
+      ctx.bezierCurveTo(-15, 12, -14, -14, 0, -22);
+      ctx.fillStyle = `rgb(${75 + Math.floor(Math.random() * 25)}, ${130 + Math.floor(Math.random() * 35)}, ${50 + Math.floor(Math.random() * 20)})`;
+      ctx.fill();
+
+      // 微弱中央主叶脉
+      ctx.beginPath();
+      ctx.moveTo(0, -20);
+      ctx.lineTo(0, 20);
+      ctx.strokeStyle = 'rgba(160, 210, 110, 0.45)';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    return texture;
+  }
+
+  /**
+   * 在枝条梢头生成轻盈、透光且绝不遮挡骨架主干的细碎叶片片状交叉网格
+   */
+  public createFoliageCloud(center: THREE.Vector3, _radius: number): THREE.Group {
     const group = new THREE.Group();
     group.position.copy(center);
 
-    // 精致的 3-4 片微型层叠薄片
-    const padCount = 3;
-    for (let i = 0; i < padCount; i++) {
-      // 极小半径的多面体，压成极薄的水平小云片
-      const geom = new THREE.IcosahedronGeometry(scale * (0.7 + i * 0.2), 2);
-      geom.scale(1.4, 0.18, 1.1); // 极致扁平化，避免膨胀成面团
+    // 尺寸严格约束在 0.12 - 0.16m，小巧点缀在梢头，透风透光
+    const padSize = 0.14;
+    const cardCount = 3;
 
+    for (let i = 0; i < cardCount; i++) {
+      const geom = new THREE.PlaneGeometry(padSize, padSize);
       const mesh = new THREE.Mesh(geom, this.leafMaterial.clone());
-      const mat = mesh.material as THREE.MeshStandardMaterial;
-      
-      // 顶层微带初春/盛夏嫩黄微光，底层深沉
-      mat.color.offsetHSL(
-        0.02 * (i - 1),
-        0.05,
-        0.04 * (padCount - i)
-      );
 
-      // 上下错落但紧密聚拢在小枝周围
+      // 各片微倾斜十字交叉，从任何角度看都通透轻盈
+      const rotY = (i * Math.PI) / cardCount;
+      const rotX = (Math.random() - 0.5) * 0.4;
+      const rotZ = (Math.random() - 0.5) * 0.4;
+      mesh.rotation.set(rotX, rotY, rotZ);
+
+      // 微偏移避免共面闪烁
       mesh.position.set(
-        (Math.random() - 0.5) * scale * 0.4,
-        (i - 1) * scale * 0.15,
-        (Math.random() - 0.5) * scale * 0.4
+        (Math.random() - 0.5) * 0.04,
+        (Math.random() - 0.5) * 0.03,
+        (Math.random() - 0.5) * 0.04
       );
-      mesh.rotation.y = Math.random() * Math.PI;
-      mesh.rotation.x = (Math.random() - 0.5) * 0.1;
-      mesh.rotation.z = (Math.random() - 0.5) * 0.1;
 
       mesh.castShadow = true;
       mesh.receiveShadow = true;
