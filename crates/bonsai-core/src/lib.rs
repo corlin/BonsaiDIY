@@ -5,6 +5,7 @@ pub mod prune;
 pub mod growth;
 pub mod wire;
 pub mod rules;
+pub mod ecs;
 pub mod wasm;
 pub mod ffi;
 
