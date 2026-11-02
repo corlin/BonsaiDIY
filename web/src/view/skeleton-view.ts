@@ -148,7 +148,7 @@ export class TreeRenderer {
       }
     }
 
-    // 计算各子树深度 (Subtree Depth Memo)，用于最深主轴连续性判定
+    // 计算各子树深度 (Subtree Depth)，用于最深主轴连续性判定
     const depthMemo = new Map<number, number>();
     const getSubtreeDepth = (segId: number): number => {
       if (depthMemo.has(segId)) return depthMemo.get(segId)!;
@@ -167,7 +167,7 @@ export class TreeRenderer {
     };
 
     // ===== 最深主轴连续性判定 (Deepest-Spine Continuation) =====
-    // 彻底杜绝在粗枝分叉处将粗干截断成滑稽火箭头！
+    // 粗大主干与大主枝一路贯穿连续收窄，绝不中途截断！
     const continuationChildMap = new Map<number, TreeSegmentRenderData | null>();
     for (const seg of segments) {
       const children = childrenMap.get(seg.id) ?? [];
@@ -176,10 +176,6 @@ export class TreeRenderer {
       if (children.length > 0) {
         const dirParent = new THREE.Vector3().subVectors(seg.end, seg.start).normalize();
 
-        // 排序规则：
-        // 1. 同级 order 优先 (直系延续)；
-        // 2. 否则按子树深度从深到浅排列 (主干通向最深微梢)；
-        // 3. 深度相同时按夹角偏角从直向到斜向排列 (选偏角最小者)。
         const sorted = [...children].sort((a, b) => {
           const sameOrderA = a.order === seg.order ? 1 : 0;
           const sameOrderB = b.order === seg.order ? 1 : 0;
@@ -211,7 +207,7 @@ export class TreeRenderer {
       rootSeg = segments[0];
     }
 
-    // ===== 全局角平分标架与半径传播体系 =====
+    // ===== 全局角平分标架与温和微收尖体系 =====
     interface SegmentSplineState {
       startFrame: Frame3D;
       endFrame: Frame3D;
@@ -220,7 +216,6 @@ export class TreeRenderer {
     }
     const splineStateMap = new Map<number, SegmentSplineState>();
 
-    // 自顶向下遍历骨架主轴并计算角平分无缝贴合标架
     const processBranchSpine = (seg: TreeSegmentRenderData, incomingFrame: Frame3D, incomingRadius: number) => {
       let currentSeg: TreeSegmentRenderData | null = seg;
       let curFrame = incomingFrame;
@@ -231,7 +226,6 @@ export class TreeRenderer {
         const pEnd = currentSeg.end.clone();
         const dirCurr = new THREE.Vector3().subVectors(pEnd, pStart).normalize();
 
-        // 沿当前段平行输运得到段中切线标架
         const midFrame = parallelTransport(curFrame, dirCurr);
 
         const contChild: TreeSegmentRenderData | null = continuationChildMap.get(currentSeg.id) ?? null;
@@ -239,8 +233,7 @@ export class TreeRenderer {
         let endRadius: number;
 
         if (contChild) {
-          // 直系延续段：在相交节点计算严格的角平分法向 N_miter = normalize(dirCurr + dirChild)
-          // 彻底根除两段相互倾斜造成的阶梯断层与裂缝！
+          // 直系延续段：计算无缝角平分共面法向 N_miter = normalize(dirCurr + dirChild)
           const dirChild = new THREE.Vector3().subVectors(contChild.end, contChild.start).normalize();
           let miterNormal = new THREE.Vector3().addVectors(dirCurr, dirChild).normalize();
           if (miterNormal.lengthSq() < 1e-4) {
@@ -248,12 +241,11 @@ export class TreeRenderer {
           }
 
           endFrame = parallelTransport(midFrame, miterNormal);
-          // 终点半径平滑过渡到延续子段
           endRadius = contChild.radius;
         } else {
-          // 真正的末梢梢头：Order >= 2 细梢精准收窄至 3.5mm 真实微细尺度
+          // 末梢梢头：温和微收尖 (0.86x)，彻底消灭尖锐火箭头！
           endFrame = parallelTransport(midFrame, dirCurr);
-          endRadius = currentSeg.order >= 2 ? 0.0035 : currentSeg.radius * 0.65;
+          endRadius = Math.max(0.0055, currentSeg.radius * 0.86);
         }
 
         splineStateMap.set(currentSeg.id, {
@@ -263,23 +255,20 @@ export class TreeRenderer {
           endRadius,
         });
 
-        // 递归遍历所有从当前段分出的侧向分枝 (Lateral Side Branches)
+        // 遍历所有侧向分枝
         const allChildren = childrenMap.get(currentSeg.id) ?? [];
         for (const child of allChildren) {
           if (child.id !== contChild?.id) {
-            // 侧枝从母枝交接处萌生，继承当前节点标架并旋转至侧枝生长方向
             const childDir = new THREE.Vector3().subVectors(child.end, child.start).normalize();
             const childInitFrame = parallelTransport(endFrame, childDir);
-            // 侧枝基部施加木栓质枝领膨大
-            const branchCollarRadius = child.radius * 1.35;
+            // 侧枝基部克制微隆 (1.08x)，杜绝臃肿球根
+            const branchCollarRadius = child.radius * 1.08;
             processBranchSpine(child, childInitFrame, branchCollarRadius);
           }
         }
 
-        // 沿直系主轴无缝延续推进
         if (contChild) {
           currentSeg = contChild;
-          // 子段起点标架与终点标架 100% 严格一致，顶点完全贴合！
           curFrame = endFrame;
           curRadius = endRadius;
         } else {
@@ -288,7 +277,6 @@ export class TreeRenderer {
       }
     };
 
-    // 根节点初始正交基
     const rootDir = new THREE.Vector3().subVectors(rootSeg.end, rootSeg.start).normalize();
     let rootRef = new THREE.Vector3(0, 0, 1);
     if (Math.abs(rootDir.dot(rootRef)) > 0.85) {
@@ -298,7 +286,7 @@ export class TreeRenderer {
     const rootV = new THREE.Vector3().crossVectors(rootDir, rootU).normalize();
     const initialRootFrame: Frame3D = { u: rootU, v: rootV, t: rootDir };
 
-    const rootBaseRadius = rootSeg.radius * 1.35;
+    const rootBaseRadius = rootSeg.radius * 1.25;
     processBranchSpine(rootSeg, initialRootFrame, rootBaseRadius);
 
     // 兜底补全
@@ -314,12 +302,12 @@ export class TreeRenderer {
           startFrame: f,
           endFrame: f,
           startRadius: seg.radius,
-          endRadius: seg.order >= 2 ? 0.0035 : seg.radius * 0.70,
+          endRadius: Math.max(0.0055, seg.radius * 0.86),
         });
       }
     }
 
-    // ===== 生成各节段无缝流形三维网格 =====
+    // ===== 生成各节段无缝网格 =====
     for (const seg of segments) {
       const parentSeg = parentMap.get(seg.id) ?? null;
       const contChild = continuationChildMap.get(seg.id) ?? null;
@@ -330,7 +318,7 @@ export class TreeRenderer {
       this.interactiveMeshes.push(mesh);
       this.treeGroup.add(mesh);
 
-      // 仅在真正的末梢细梢外缘挂载饱满向阳枝托云片，老干主枝露骨显苍！
+      // 仅在真正的末梢外缘挂载实心多层向阳绿云，枝入托中！
       const children = childrenMap.get(seg.id) ?? [];
       if (children.length === 0 && seg.order >= 2) {
         this.attachOakFoliagePad(seg);
@@ -352,11 +340,11 @@ export class TreeRenderer {
   }
 
   /**
-   * 生成角平分无缝贴合样条网格 (Miter Joint Spline Mesh)
-   * 1. 严格使用角平分正交基，彻底消灭斜切阶梯裂痕与断层；
-   * 2. 侧枝深潜入母干内部，彻底消灭空心吸管卷边；
-   * 3. 根底深埋闭合，俯视 100% 封闭实心老木；
-   * 4. 仅在真正的 3.5mm 细梢末端平滑闭合卵形微芽，彻底消除粗大火箭尖头。
+   * 生成无缝连续样条网格 (Continuous Segment Mesh)
+   * - 连续温和微收尖，消除铅笔火箭头；
+   * - 侧枝深潜入母干内部，消除吸管卷边；
+   * - 根底深埋闭合，俯视 100% 封闭老木；
+   * - 末端平缓微凸钝圆顶盖。
    */
   private createContinuousSegmentMesh(
     seg: TreeSegmentRenderData,
@@ -372,10 +360,9 @@ export class TreeRenderer {
     const dir = new THREE.Vector3().subVectors(pEnd, pStart).normalize();
 
     if (isRootBase) {
-      // 主干最基底向下深埋至土丘深处 (y=0.10)，稳健扎根
       pStart.y = 0.10;
     } else if (isSideBranch && parentSeg) {
-      // 侧分枝起点深埋入母枝髓心内部 90% 母枝半径，杜绝吸管卷边与外露切面
+      // 侧分枝起点深埋入母枝髓心内部 90% 母枝半径
       const parentRadius = parentSeg.radius;
       pStart.addScaledVector(dir, -parentRadius * 0.90);
     }
@@ -388,7 +375,6 @@ export class TreeRenderer {
     const uvs: number[] = [];
     const indices: number[] = [];
 
-    // 从起点标架向终点角平分标架做平滑平行输运过渡
     const frameSlices: Frame3D[] = [];
     for (let slice = 0; slice <= lengthSlices; slice++) {
       const t = slice / lengthSlices;
@@ -402,20 +388,19 @@ export class TreeRenderer {
       const center = new THREE.Vector3().lerpVectors(pStart, pEnd, t);
       const f = frameSlices[slice];
 
-      // 半径沿样条平滑过渡
+      // 半径温和过渡
       let curRadius = THREE.MathUtils.lerp(splineState.startRadius, splineState.endRadius, t);
 
-      // 侧枝基部木栓质枝领在第 0~1 环保留隆起萌发态
+      // 侧枝基部微隆木栓 (1.08x)
       if (isSideBranch && t < 0.35) {
         const collarBlend = Math.cos(t * Math.PI / 0.35 * 0.5);
-        curRadius = Math.max(curRadius, seg.radius * (1.0 + 0.35 * collarBlend));
+        curRadius = Math.max(curRadius, seg.radius * (1.0 + 0.08 * collarBlend));
       }
 
       for (let j = 0; j <= radialSegments; j++) {
         const theta = (j / radialSegments) * Math.PI * 2;
         let flute = 1.0;
         if (seg.order === 0) {
-          // 古老夏栎主干特有的纵向木栓质厚实筋肋
           flute = 1.0 + 0.05 * (1.0 - t * 0.4) * Math.cos(5 * theta) + 0.02 * Math.sin(3 * theta);
         }
 
@@ -448,7 +433,7 @@ export class TreeRenderer {
       }
     }
 
-    // 1. 树干基底深埋实心底盖 (Solid Bottom Cap) - 彻底消灭俯视空心烟囱！
+    // 1. 树干基底深埋实心底盖 (Solid Bottom Cap)
     if (isRootBase) {
       const bottomCenterIndex = vertices.length / 3;
       vertices.push(pStart.x, pStart.y - 0.005, pStart.z);
@@ -460,12 +445,10 @@ export class TreeRenderer {
       }
     }
 
-    // 2. 只有真正的最末梢小细枝 (Order >= 2 且无子节点) 才在 3.5mm 处收拢微芽！
-    // 粗大枝干中途绝不封盖，100% 消除滑稽火箭头！
-    if (!continuationChild && seg.order >= 2) {
+    // 2. 真正的末梢末端平缓微凸钝圆顶盖 (微凸仅 2mm，绝非尖锐火箭头！)
+    if (!continuationChild) {
       const tipCenterIndex = vertices.length / 3;
-      // 微观夏栎卵形顶芽微微隆起 4mm
-      const budTipPos = pEnd.clone().addScaledVector(dir, 0.004);
+      const budTipPos = pEnd.clone().addScaledVector(dir, 0.002);
       vertices.push(budTipPos.x, budTipPos.y, budTipPos.z);
       normals.push(dir.x, dir.y, dir.z);
       uvs.push(0.5, seg.id + 1.0);
@@ -548,12 +531,14 @@ export class TreeRenderer {
   }
 
   /**
-   * 1:1 还原名木夏栎“枝穿入托、三层叠翠、向阳饱满”的顶级枝托云片
+   * 1:1 还原名木夏栎“枝穿入托、厚实聚簇、实心向阳”的顶级向阳云托：
+   * 彻底消灭秃头露尖与悬空草裙！
+   * 60 片单叶紧密围绕细梢，内层贴合木质部包覆，中外层向阳叠翠微垂。
    */
   private attachOakFoliagePad(seg: TreeSegmentRenderData): void {
-    const leafCount = 48;
-    const padRadiusX = 0.16;
-    const padRadiusZ = 0.13;
+    const leafCount = 60; // 紧实饱满的云托密度
+    const padRadiusX = 0.095; // 紧凑凝聚，收于枝头周围
+    const padRadiusZ = 0.085;
 
     const branchDir = new THREE.Vector3().subVectors(seg.end, seg.start).normalize();
     const padCenter = seg.end.clone();
@@ -565,23 +550,27 @@ export class TreeRenderer {
     }
     const forward = new THREE.Vector3().crossVectors(right, up).normalize();
 
-    // 三层致密叠瓦分布
+    // 三层致密实心包裹分布
     for (let i = 0; i < leafCount; i++) {
       let distRatio: number;
       let tierHeight: number;
+      let alongBranchOffset: number;
 
-      if (i < 14) {
-        // 内层：贴近细梢端头，紧密遮盖木质部
-        distRatio = 0.03 + Math.sqrt(Math.random()) * 0.35;
-        tierHeight = 0.003 + (Math.random() - 0.5) * 0.008;
-      } else if (i < 34) {
-        // 中层：向外水平平展铺开
-        distRatio = 0.30 + Math.sqrt(Math.random()) * 0.45;
-        tierHeight = 0.015 + (Math.random() - 0.5) * 0.008;
+      if (i < 20) {
+        // Tier 0 (核心包覆层，20片): 紧贴细梢端头与末端木质部，彻底掩蔽枝头
+        distRatio = 0.02 + Math.random() * 0.28;
+        alongBranchOffset = -0.025 + Math.random() * 0.035; // 沿枝条向后 2.5cm 到向前 1cm
+        tierHeight = 0.003 + (Math.random() - 0.5) * 0.006;
+      } else if (i < 45) {
+        // Tier 1 (中层向阳穹顶，25片): 向阳水平平展铺开
+        distRatio = 0.28 + Math.sqrt(Math.random()) * 0.42;
+        alongBranchOffset = -0.010 + (Math.random() - 0.5) * 0.025;
+        tierHeight = 0.014 + (Math.random() - 0.5) * 0.006;
       } else {
-        // 外缘层：向边缘微拱微垂
+        // Tier 2 (外缘微垂舒展，15片): 勾勒出优美向阳云托边缘
         distRatio = 0.65 + Math.sqrt(Math.random()) * 0.35;
-        tierHeight = 0.006 - Math.pow(distRatio, 2) * 0.015;
+        alongBranchOffset = (Math.random() - 0.5) * 0.020;
+        tierHeight = 0.006 - Math.pow(distRatio, 2) * 0.014;
       }
 
       const angle = (i * Math.PI * 2) / 14 + (Math.random() - 0.5) * 0.35;
@@ -589,6 +578,7 @@ export class TreeRenderer {
       const offsetZ = Math.sin(angle) * padRadiusZ * distRatio;
 
       const leafPos = padCenter.clone()
+        .addScaledVector(branchDir, alongBranchOffset)
         .addScaledVector(right, offsetX)
         .addScaledVector(forward, offsetZ)
         .add(new THREE.Vector3(0, tierHeight, 0));
@@ -596,8 +586,9 @@ export class TreeRenderer {
       const leafMesh = new THREE.Mesh(this.leafGeometry, this.leafMaterial);
       leafMesh.position.copy(leafPos);
 
+      // 单叶朝向：叶柄向内，叶身向外微拱向上包裹
       let outwardDir: THREE.Vector3;
-      if (Math.hypot(offsetX, offsetZ) > 0.01) {
+      if (Math.hypot(offsetX, offsetZ) > 0.008) {
         outwardDir = new THREE.Vector3()
           .addScaledVector(right, offsetX)
           .addScaledVector(forward, offsetZ)
@@ -609,10 +600,16 @@ export class TreeRenderer {
       const yawAngle = Math.atan2(outwardDir.x, outwardDir.z) + (Math.random() - 0.5) * 0.25;
       leafMesh.rotation.y = yawAngle;
 
-      leafMesh.rotation.x = 0.12 + Math.random() * 0.10;
-      leafMesh.rotation.z = (Math.random() - 0.5) * 0.10;
+      if (i < 20) {
+        // 核心层：叶面向上包覆，掩蔽枝头
+        leafMesh.rotation.x = -0.15 + (Math.random() - 0.5) * 0.15;
+      } else {
+        // 中外层：平展向天微仰
+        leafMesh.rotation.x = 0.10 + Math.random() * 0.08;
+      }
+      leafMesh.rotation.z = (Math.random() - 0.5) * 0.12;
 
-      const scale = 0.95 + Math.random() * 0.18;
+      const scale = 0.90 + Math.random() * 0.20;
       leafMesh.scale.set(scale, scale, scale);
 
       leafMesh.castShadow = true;
