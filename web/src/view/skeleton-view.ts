@@ -95,7 +95,6 @@ export class TreeRenderer {
       childrenMap.set(seg.id, []);
     }
     for (const seg of segments) {
-      // 遍历寻找谁的 end 与当前 seg 的 start 吻合
       for (const candidate of segments) {
         if (candidate.id !== seg.id && candidate.end.distanceToSquared(seg.start) < 1e-4) {
           parentMap.set(seg.id, candidate);
@@ -109,14 +108,25 @@ export class TreeRenderer {
     for (const seg of segments) {
       const parentSeg = parentMap.get(seg.id) ?? null;
       const children = childrenMap.get(seg.id) ?? [];
-      const primaryChild = children.length > 0 ? children[0] : null;
 
-      const mesh = this.createLoftedSegmentMesh(seg, parentSeg, primaryChild);
+      // 寻找直系主轴延续子节点 (Continuation Child)，绝不能被侧枝带偏
+      let continuationChild: TreeSegmentRenderData | null = null;
+      if (children.length > 0) {
+        continuationChild = children.find(c => c.order === seg.order) ?? null;
+        if (!continuationChild && seg.order === 0) {
+          const sorted = [...children].sort((a, b) => a.order - b.order);
+          continuationChild = sorted[0];
+        } else if (!continuationChild && children.length === 1) {
+          continuationChild = children[0];
+        }
+      }
+
+      const mesh = this.createLoftedSegmentMesh(seg, parentSeg, continuationChild);
       this.segmentMeshes.set(seg.id, mesh);
       this.interactiveMeshes.push(mesh);
       this.treeGroup.add(mesh);
 
-      // 仅在真实枝条末梢梢头挂载平展向阳微拱枝托云片 (避免在主干与主枝分叉处长出死板叶子)
+      // 仅在真实末梢梢头挂载平展向阳微拱枝托云片
       if (children.length === 0 && seg.order >= 1) {
         this.attachOakFoliagePad(seg);
       }
@@ -138,68 +148,89 @@ export class TreeRenderer {
 
   /**
    * 连续放样枝干网格 (Continuous Lofted Spline Segment)
-   * 依据相邻节段夹角二等分线对齐两端横截面法向，实现 100% 无缝连接
+   * 采用 RMF 最小旋转标架 (Rotation Minimizing Frames)，彻底消灭万向节锁与沙漏扭拧
    */
   private createLoftedSegmentMesh(
     seg: TreeSegmentRenderData,
     parentSeg: TreeSegmentRenderData | null,
-    primaryChild: TreeSegmentRenderData | null
+    continuationChild: TreeSegmentRenderData | null
   ): THREE.Mesh {
-    const pStart = seg.start;
-    const pEnd = seg.end;
+    const pStart = seg.start.clone();
+    const pEnd = seg.end.clone();
     const dirCurr = new THREE.Vector3().subVectors(pEnd, pStart).normalize();
+
+    // 判断是否为从较粗母枝上萌发出的“侧向分枝” (Lateral Side Branch)
+    const isSideBranch = parentSeg !== null && (seg.order > parentSeg.order || (parentSeg.order === 0 && seg.order > 0));
 
     // 1. 起点截面法线
     let normStart: THREE.Vector3;
-    if (parentSeg) {
+    if (isSideBranch) {
+      // 侧生分枝：起点法线自然沿自身枝条方向，起始端微退入主干内部
+      normStart = dirCurr.clone();
+      const parentRadius = parentSeg ? parentSeg.radius : 0.05;
+      pStart.addScaledVector(dirCurr, -parentRadius * 0.25);
+    } else if (parentSeg) {
+      // 直系延续段：取母段与当前段角平分线
       const dirParent = new THREE.Vector3().subVectors(parentSeg.end, parentSeg.start).normalize();
       normStart = new THREE.Vector3().addVectors(dirParent, dirCurr).normalize();
-      if (normStart.lengthSq() < 0.1) normStart.copy(dirCurr);
+      if (normStart.lengthSq() < 0.01) normStart.copy(dirCurr);
     } else {
-      // 树干基底根颈：水平贴地截面 (法向恒为 (0, 1, 0))
-      normStart = new THREE.Vector3(0, 1, 0);
+      // 树干最基底：垂直向上截面
+      normStart = dirCurr.clone();
     }
 
     // 2. 终点截面法线
     let normEnd: THREE.Vector3;
-    if (primaryChild) {
-      const dirChild = new THREE.Vector3().subVectors(primaryChild.end, primaryChild.start).normalize();
+    if (continuationChild) {
+      const dirChild = new THREE.Vector3().subVectors(continuationChild.end, continuationChild.start).normalize();
       normEnd = new THREE.Vector3().addVectors(dirCurr, dirChild).normalize();
-      if (normEnd.lengthSq() < 0.1) normEnd.copy(dirCurr);
+      if (normEnd.lengthSq() < 0.01) normEnd.copy(dirCurr);
     } else {
       normEnd = dirCurr.clone();
     }
 
     // 3. 截面半径放样
     let rStart = seg.radius;
-    // 主干底部根盘喇叭口膨大 (Flare)
     if (seg.order === 0 && !parentSeg) {
+      // 主干底部根盘喇叭口膨大 (Flare)
       rStart = seg.radius * 1.35;
+    } else if (isSideBranch) {
+      // 侧分枝基部木栓质“枝领”微外扩 (Branch Bark Ridge)
+      rStart = seg.radius * 1.25;
     }
-    let rEnd = primaryChild ? primaryChild.radius : seg.radius * (seg.order === 0 ? 0.88 : 0.76);
+
+    let rEnd = continuationChild ? continuationChild.radius : seg.radius * (seg.order === 0 ? 0.88 : 0.72);
 
     const radialSegments = 24;
-    const lengthSlices = 3;
+    const lengthSlices = 4;
 
     const vertices: number[] = [];
     const normals: number[] = [];
     const uvs: number[] = [];
     const indices: number[] = [];
 
-    // 参考向上向量
-    const refUp = new THREE.Vector3(0, 1, 0);
+    // ===== RMF (Rotation Minimizing Frames) 稳定正交基底构建 =====
+    // 选取与 dirCurr 夹角最大的全局轴作为参考轴，彻底消灭奇异点
+    let refAxis: THREE.Vector3;
+    if (Math.abs(dirCurr.y) > 0.80) {
+      // 垂直或近垂直主干：以 X 轴为稳定参考
+      refAxis = new THREE.Vector3(1, 0, 0);
+    } else {
+      // 水平或倾斜侧枝：以 Y 轴为稳定参考
+      refAxis = new THREE.Vector3(0, 1, 0);
+    }
+    const baseU = new THREE.Vector3().crossVectors(dirCurr, refAxis).normalize();
+    const baseV = new THREE.Vector3().crossVectors(dirCurr, baseU).normalize();
 
     for (let slice = 0; slice <= lengthSlices; slice++) {
       const t = slice / lengthSlices;
       const center = new THREE.Vector3().lerpVectors(pStart, pEnd, t);
       const ringNorm = new THREE.Vector3().lerpVectors(normStart, normEnd, t).normalize();
 
-      // 构建截面正交基向量 (u, v)
-      let uVec = new THREE.Vector3().crossVectors(ringNorm, refUp).normalize();
-      if (uVec.lengthSq() < 0.05) {
-        uVec = new THREE.Vector3().crossVectors(ringNorm, new THREE.Vector3(0, 0, 1)).normalize();
-      }
-      const vVec = new THREE.Vector3().crossVectors(ringNorm, uVec).normalize();
+      // 最短测地线四元数将基底平滑传递至 ringNorm，绕主轴旋转角严格为 0
+      const q = new THREE.Quaternion().setFromUnitVectors(dirCurr, ringNorm);
+      const uVec = baseU.clone().applyQuaternion(q);
+      const vVec = baseV.clone().applyQuaternion(q);
 
       // 半径插值与主干老树皮纵向苍劲筋肋 (Fluting)
       const curRadius = THREE.MathUtils.lerp(rStart, rEnd, t);
@@ -209,7 +240,7 @@ export class TreeRenderer {
         let flute = 1.0;
         if (seg.order === 0) {
           // 老桩古栎特有的纵向筋肋隆起
-          flute = 1.0 + 0.06 * (1.0 - t) * Math.cos(5 * theta) + 0.03 * Math.sin(3 * theta);
+          flute = 1.0 + 0.05 * (1.0 - t * 0.5) * Math.cos(5 * theta) + 0.02 * Math.sin(3 * theta);
         }
 
         const effRadius = curRadius * flute;
@@ -219,7 +250,6 @@ export class TreeRenderer {
 
         vertices.push(vx, vy, vz);
 
-        // 法线朝外
         const nx = Math.cos(theta) * uVec.x + Math.sin(theta) * vVec.x;
         const ny = Math.cos(theta) * uVec.y + Math.sin(theta) * vVec.y;
         const nz = Math.cos(theta) * uVec.z + Math.sin(theta) * vVec.z;
@@ -239,16 +269,32 @@ export class TreeRenderer {
       }
     }
 
-    // 若为末梢分支，将末端截面优雅缝合圆顶
-    if (!primaryChild) {
+    // 若为梢头末端分支，优雅封盖圆顶
+    if (!continuationChild) {
       const tipCenterIndex = vertices.length / 3;
-      vertices.push(pEnd.x + normEnd.x * rEnd * 0.4, pEnd.y + normEnd.y * rEnd * 0.4, pEnd.z + normEnd.z * rEnd * 0.4);
+      vertices.push(
+        pEnd.x + normEnd.x * rEnd * 0.2,
+        pEnd.y + normEnd.y * rEnd * 0.2,
+        pEnd.z + normEnd.z * rEnd * 0.2
+      );
       normals.push(normEnd.x, normEnd.y, normEnd.z);
       uvs.push(0.5, seg.id + 1.0);
 
       const lastRow = lengthSlices * (radialSegments + 1);
       for (let j = 0; j < radialSegments; j++) {
         indices.push(lastRow + j, tipCenterIndex, lastRow + j + 1);
+      }
+    }
+
+    // 若为侧生分枝起始端，封底以防止内部透空
+    if (isSideBranch) {
+      const startCenterIndex = vertices.length / 3;
+      vertices.push(pStart.x, pStart.y, pStart.z);
+      normals.push(-normStart.x, -normStart.y, -normStart.z);
+      uvs.push(0.5, seg.id);
+
+      for (let j = 0; j < radialSegments; j++) {
+        indices.push(j + 1, startCenterIndex, j);
       }
     }
 
