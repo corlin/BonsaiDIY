@@ -180,7 +180,3 @@ export function createAgedOakBarkMaterialSet(): BarkMaterialSet {
     twigBark,
   };
 }
-
-export function createAgedOakBarkMaterial(): THREE.MeshStandardMaterial {
-  return createAgedOakBarkMaterialSet().trunkBark;
-}

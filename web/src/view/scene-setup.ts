@@ -368,50 +368,5 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
     scene.add(moss);
   }
 
-  // 5. 抓地盘曲的八方主露根 (Nebari Buttress Roots)
-  // 从树干根颈 (0, 0.165, 0) 苍劲外撇，紧贴低缓土面延伸并隐没于赤玉土中
-  const rootMat = new THREE.MeshStandardMaterial({
-    color: 0x6e6154,
-    roughness: 0.84,
-  });
-  const rootAngles = [0.12, 0.88, 1.68, 2.52, 3.28, 4.02, 4.82, 5.58];
-
-  for (const angle of rootAngles) {
-    const rootSpread = 0.26 + Math.random() * 0.08;
-    const points: THREE.Vector3[] = [];
-
-    // 沿土面轮廓生成平滑样条曲线
-    for (let t = 0; t <= 1.0; t += 0.25) {
-      const curDist = 0.05 + t * rootSpread;
-      const u = curDist / soilRadiusX;
-      const curY = 0.175 - 0.022 * Math.pow(u, 1.8) - t * 0.006;
-      points.push(new THREE.Vector3(
-        Math.cos(angle) * curDist,
-        curY,
-        Math.sin(angle) * curDist * (soilRadiusZ / soilRadiusX)
-      ));
-    }
-
-    const curve = new THREE.CatmullRomCurve3(points);
-    const tubeGeom = new THREE.TubeGeometry(curve, 16, 0.022, 12, false);
-
-    // 沿根系末端逐渐收窄
-    const pos = tubeGeom.attributes.position;
-    for (let k = 0; k < pos.count; k++) {
-      const p = new THREE.Vector3(pos.getX(k), pos.getY(k), pos.getZ(k));
-      const distToCenter = Math.hypot(p.x, p.z);
-      const taper = Math.max(0.35, 1.0 - (distToCenter / (rootSpread + 0.06)) * 0.65);
-      // 沿主轴微缩
-      const closestT = Math.min(1.0, Math.max(0.0, distToCenter / (rootSpread + 0.05)));
-      const centerPoint = curve.getPoint(closestT);
-      p.sub(centerPoint).multiplyScalar(taper).add(centerPoint);
-      pos.setXYZ(k, p.x, p.y, p.z);
-    }
-    tubeGeom.computeVertexNormals();
-
-    const rootMesh = new THREE.Mesh(tubeGeom, rootMat);
-    rootMesh.castShadow = true;
-    rootMesh.receiveShadow = true;
-    scene.add(rootMesh);
-  }
+  // 树木基部自身具备仿生八方老根盘 (Nebari Flare)，自然扎根于低缓赤玉土与微绒青苔之中
 }

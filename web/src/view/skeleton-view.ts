@@ -114,6 +114,13 @@ export class TreeRenderer {
       this.treeGroup.remove(child);
       if (child instanceof THREE.Mesh) {
         child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((m) => m.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
       }
     }
     while (this.foliageGroup.children.length > 0) {

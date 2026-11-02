@@ -1,5 +1,21 @@
+use serde::{Deserialize, Serialize};
 use crate::ecs::world::BonsaiWorld;
-use crate::rules::{DiagnosticIssue, Severity};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Severity {
+    Info,
+    Warning,
+    Danger,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DiagnosticIssue {
+    pub rule_id: String,
+    pub severity: Severity,
+    pub message_key: String,
+    pub evidence_segment_id: Option<u32>,
+    pub detail: String,
+}
 
 /// 盆景美学与造型审计系统 (RuleAuditSystem)
 /// 基于 Reddit r/Bonsai Wiki 规则全量审定比例与健康状态

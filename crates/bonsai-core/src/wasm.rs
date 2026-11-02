@@ -49,8 +49,8 @@ impl BonsaiWasmEngine {
             "energy_pool": self.world.energy.nsc_stored,
             "energy_delta": self.world.energy.nsc_stored - prev_energy,
             "new_internodes_count": report.new_internodes_count,
-            "cambium_thickened": prev_season == crate::model::Season::Summer,
-            "defoliated": prev_season == crate::model::Season::Winter,
+            "cambium_thickened": prev_season == crate::ecs::resources::Season::Summer,
+            "defoliated": prev_season == crate::ecs::resources::Season::Winter,
         });
 
         json_report.to_string()

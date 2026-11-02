@@ -1,7 +1,45 @@
 use serde::{Deserialize, Serialize};
 use super::entity::Entity;
-use crate::model::Season;
-use crate::rng::DeterministicRng;
+
+/// 确定性伪随机数发生器 (DeterministicRng)
+/// 采用高效轻量的 Xorshift64 算法，保证生长模拟跨平台 100% 可重现
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DeterministicRng {
+    state: u64,
+}
+
+impl DeterministicRng {
+    pub fn new(seed: u64) -> Self {
+        let state = if seed == 0 { 0x853c49e6748fea9b } else { seed };
+        Self { state }
+    }
+
+    pub fn next_u32(&mut self) -> u32 {
+        let mut x = self.state;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.state = x;
+        (x & 0xFFFFFFFF) as u32
+    }
+
+    pub fn next_f32(&mut self) -> f32 {
+        (self.next_u32() as f32) / 4294967296.0
+    }
+
+    pub fn range(&mut self, min: f32, max: f32) -> f32 {
+        min + self.next_f32() * (max - min)
+    }
+}
+
+/// 四季生命周期枚举 (Season)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Season {
+    Spring,
+    Summer,
+    Autumn,
+    Winter,
+}
 
 /// 四季生命周期资源 (SeasonResource)
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

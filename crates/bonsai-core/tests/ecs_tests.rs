@@ -4,7 +4,7 @@ use bonsai_core::ecs::systems::growth_system::run_growth_system;
 use bonsai_core::ecs::systems::prune_system::run_prune_system;
 use bonsai_core::ecs::systems::wire_system::{run_apply_wire_system, run_remove_wire_system};
 use bonsai_core::ecs::systems::extract_render_system::run_extract_render_system;
-use bonsai_core::model::Season;
+use bonsai_core::Season;
 
 #[test]
 fn test_ecs_entity_allocation_and_reuse() {

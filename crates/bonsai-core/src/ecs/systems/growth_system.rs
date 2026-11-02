@@ -1,6 +1,6 @@
 use crate::ecs::world::BonsaiWorld;
 use crate::ecs::components::BudState;
-use crate::model::Season;
+use crate::ecs::resources::Season;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
