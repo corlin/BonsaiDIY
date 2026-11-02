@@ -21,6 +21,14 @@ impl Season {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct WireInfo {
+    pub gauge_mm: f32,          // 铝丝规格 (1.0 - 4.0 mm)
+    pub wired_seasons: u32,     // 缠绕持续的生长季计数
+    pub is_set: bool,           // 是否已完成木质化塑性定型
+    pub has_wire_bite: bool,    // 是否已产生嵌线勒痕
+}
+
 #[derive(Clone, Debug)]
 pub struct InternodeSegment {
     pub id: u32,
@@ -31,6 +39,18 @@ pub struct InternodeSegment {
     pub radius: f32,
     pub leaf_count: u32,
     pub is_wired: bool,
+    pub wire_info: Option<WireInfo>,
+    pub pre_wire_end_pos: Option<Vector3D>,
+}
+
+impl InternodeSegment {
+    pub fn branch_thickness_mm(&self) -> f32 {
+        if self.radius < 0.02 {
+            self.radius * 2000.0
+        } else {
+            self.radius * 100.0
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -68,6 +88,8 @@ impl TreeGraph {
             radius: 0.1,
             leaf_count: 1,
             is_wired: false,
+            wire_info: None,
+            pre_wire_end_pos: None,
         };
         self.segments.insert(id, seg);
         self.root_id = Some(id);
@@ -99,6 +121,8 @@ impl TreeGraph {
             radius: 0.05,
             leaf_count,
             is_wired: false,
+            wire_info: None,
+            pre_wire_end_pos: None,
         };
         self.segments.insert(id, seg);
         id

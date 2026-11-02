@@ -18,6 +18,30 @@ impl GrowthEngine {
     }
 
     pub fn advance_season(&mut self, tree: &mut TreeGraph, rng: &mut DeterministicRng) -> SeasonReport {
+        // 推进铝丝老化与塑性定型
+        for seg in tree.segments.values_mut() {
+            if let Some(ref mut wire) = seg.wire_info {
+                wire.wired_seasons += 1;
+                if wire.wired_seasons >= 2 {
+                    wire.is_set = true;
+                }
+                if wire.wired_seasons >= 4 {
+                    wire.has_wire_bite = true;
+                }
+            }
+        }
+
+        // 嵌线勒痕轻微损耗局部健康与全树能量
+        let wire_bite_count = tree
+            .segments
+            .values()
+            .filter(|s| s.wire_info.as_ref().map(|w| w.has_wire_bite).unwrap_or(false))
+            .count();
+        if wire_bite_count > 0 {
+            let penalty = wire_bite_count as f32 * 2.0;
+            tree.energy_pool = (tree.energy_pool - penalty).max(0.0);
+        }
+
         match tree.season {
             Season::Spring => self.advance_spring(tree, rng),
             Season::Summer => self.advance_summer(tree),
