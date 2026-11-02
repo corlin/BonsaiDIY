@@ -4,60 +4,50 @@ export class FoliageGenerator {
   private leafMaterial: THREE.MeshStandardMaterial;
 
   constructor() {
-    // 东方盆景经典的深墨绿微带翠色
+    // 东方盆景松柏/榆树经典云片：温润翡翠墨绿，带微透光与柔和高光
     this.leafMaterial = new THREE.MeshStandardMaterial({
-      color: 0x2e6b38,
-      roughness: 0.65,
-      metalness: 0.05,
-      flatShading: true,
+      color: 0x224929,
+      roughness: 0.55,
+      metalness: 0.08,
+      flatShading: false, // 彻底关闭硬边破碎多边形，使用平滑法线
       side: THREE.DoubleSide,
     });
   }
 
   /**
-   * 在枝条末梢生成有机、蓬松的云片状叶簇 (Foliage Cloud)
+   * 在末梢细枝生成轻盈、小巧、扁平透光的云片微托 (Bonsai Foliage Cloud)
    */
-  public createFoliageCloud(center: THREE.Vector3, scale = 0.25): THREE.Group {
+  public createFoliageCloud(center: THREE.Vector3, scale = 0.1): THREE.Group {
     const group = new THREE.Group();
     group.position.copy(center);
 
-    // 采用多个扁平的多面体簇组合成自然的日式/中式云片形态
-    const cloudCount = 5;
-    for (let i = 0; i < cloudCount; i++) {
-      const geom = new THREE.DodecahedronGeometry(scale * (0.6 + Math.random() * 0.4), 1);
-      // 压扁成椭球云片
-      geom.scale(1.2, 0.45, 0.9);
-
-      // 顶点微扰增加有机感
-      const pos = geom.attributes.position;
-      for (let j = 0; j < pos.count; j++) {
-        const vx = pos.getX(j);
-        const vy = pos.getY(j);
-        const vz = pos.getZ(j);
-        const noise = (Math.sin(vx * 10) + Math.cos(vy * 10) + Math.sin(vz * 10)) * 0.03;
-        pos.setXYZ(j, vx + noise, vy + noise, vz + noise);
-      }
-      geom.computeVertexNormals();
+    // 精致的 3-4 片微型层叠薄片
+    const padCount = 3;
+    for (let i = 0; i < padCount; i++) {
+      // 极小半径的多面体，压成极薄的水平小云片
+      const geom = new THREE.IcosahedronGeometry(scale * (0.7 + i * 0.2), 2);
+      geom.scale(1.4, 0.18, 1.1); // 极致扁平化，避免膨胀成面团
 
       const mesh = new THREE.Mesh(geom, this.leafMaterial.clone());
-      // 微调各小叶块的明度，产生通透层次感
-      (mesh.material as THREE.MeshStandardMaterial).color.offsetHSL(
-        (Math.random() - 0.5) * 0.04,
-        (Math.random() - 0.5) * 0.1,
-        (Math.random() - 0.5) * 0.08
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      
+      // 顶层微带初春/盛夏嫩黄微光，底层深沉
+      mat.color.offsetHSL(
+        0.02 * (i - 1),
+        0.05,
+        0.04 * (padCount - i)
       );
 
-      const offset = new THREE.Vector3(
-        (Math.random() - 0.5) * scale * 0.8,
-        (Math.random() - 0.3) * scale * 0.3,
-        (Math.random() - 0.5) * scale * 0.8
+      // 上下错落但紧密聚拢在小枝周围
+      mesh.position.set(
+        (Math.random() - 0.5) * scale * 0.4,
+        (i - 1) * scale * 0.15,
+        (Math.random() - 0.5) * scale * 0.4
       );
-      mesh.position.copy(offset);
-      mesh.rotation.set(
-        (Math.random() - 0.5) * 0.3,
-        Math.random() * Math.PI,
-        (Math.random() - 0.5) * 0.3
-      );
+      mesh.rotation.y = Math.random() * Math.PI;
+      mesh.rotation.x = (Math.random() - 0.5) * 0.1;
+      mesh.rotation.z = (Math.random() - 0.5) * 0.1;
+
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       group.add(mesh);

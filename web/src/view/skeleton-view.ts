@@ -38,10 +38,9 @@ export class TreeRenderer {
       scene.add(this.treeGroup);
     }
 
-    // 榆树与老桩树皮质感：深沉温润的古木色，带微糙漫反射
     this.barkMaterial = new THREE.MeshStandardMaterial({
-      color: 0x4a3728,
-      roughness: 0.86,
+      color: 0x4f3728,
+      roughness: 0.82,
       metalness: 0.05,
       flatShading: false,
     });
@@ -76,8 +75,8 @@ export class TreeRenderer {
       this.interactiveMeshes.push(mesh);
       this.treeGroup.add(mesh);
 
-      // 分叉接缝平滑球形过渡
-      const jointGeom = new THREE.SphereGeometry(seg.radius * 1.05, 12, 12);
+      // 分叉接缝平滑过渡
+      const jointGeom = new THREE.SphereGeometry(seg.radius * 1.02, 16, 16);
       const joint = new THREE.Mesh(jointGeom, this.barkMaterial);
       joint.position.copy(seg.start);
       joint.userData = { isJoint: true, segmentId: seg.id, order: seg.order };
@@ -85,9 +84,10 @@ export class TreeRenderer {
       this.interactiveMeshes.push(joint);
       this.treeGroup.add(joint);
 
-      // 在末端分枝处生成层次丰满的云片状叶簇 (Foliage Pads)
-      if (seg.order >= 1) {
-        const foliageCloud = this.foliageGen.createFoliageCloud(seg.end, Math.max(0.18, seg.radius * 6.0));
+      // 只有 Order >= 2 的细分末端枝条才点缀轻盈小云片
+      if (seg.order >= 2) {
+        const cloudScale = Math.min(0.12, Math.max(0.05, seg.radius * 2.5));
+        const foliageCloud = this.foliageGen.createFoliageCloud(seg.end, cloudScale);
         this.foliageGroup.add(foliageCloud);
       }
     }
@@ -100,10 +100,9 @@ export class TreeRenderer {
     const len = dir.length();
     const normDir = dir.clone().normalize();
 
-    // 依据达芬奇规律自然的向顶端微收尖 (Tapering)
     const radiusBottom = seg.radius;
     const radiusTop = seg.radius * 0.82;
-    const geom = new THREE.CylinderGeometry(radiusTop, radiusBottom, len, 16);
+    const geom = new THREE.CylinderGeometry(radiusTop, radiusBottom, len, 20);
 
     const mesh = new THREE.Mesh(geom, this.barkMaterial.clone());
     mesh.castShadow = true;
