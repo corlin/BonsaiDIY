@@ -207,9 +207,10 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
   scene.add(pot);
 
   // 盆口优雅的微外翻圆润口沿 (Rolled Lip) - 产生柔和漫反射高光弧线
-  const rimGeom = new THREE.TorusGeometry(1.01, 0.022, 16, 64);
+  // 经 rotateX(PI/2) 后，长轴在 X 轴，短轴在 Z 轴，故缩放向量必须为 (potRadiusX, 1.0, potRadiusZ)
+  const rimGeom = new THREE.TorusGeometry(1.0, 0.020, 16, 64);
   rimGeom.rotateX(Math.PI / 2);
-  rimGeom.scale(potRadiusX, potRadiusZ, 1.0);
+  rimGeom.scale(potRadiusX * 1.008, 1.0, potRadiusZ * 1.008);
   const rim = new THREE.Mesh(rimGeom, potMat);
   rim.position.y = potBaseY + potHeight + 0.02;
   rim.castShadow = true;
@@ -235,16 +236,16 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
   soilCanvas.width = 1024;
   soilCanvas.height = 1024;
   const sctx = soilCanvas.getContext('2d')!;
-  sctx.fillStyle = '#5c3d26'; // 纯正红褐赤玉土底色
+  sctx.fillStyle = '#785033'; // 纯正名品温润红褐赤玉土底色
   sctx.fillRect(0, 0, 1024, 1024);
 
-  // 细碎颗粒凹凸感（粒径 2~5mm 尺度，肉桂褐、陶土褐与阴影缝隙交织）
-  for (let i = 0; i < 5200; i++) {
+  // 细碎颗粒凹凸感（粒径 2~5mm 尺度，陶土肉桂褐、烘焙褐与缝隙交织）
+  for (let i = 0; i < 6000; i++) {
     const px = Math.random() * 1024;
     const py = Math.random() * 1024;
     const radius = 2.0 + Math.random() * 4.5;
     const rnd = Math.random();
-    sctx.fillStyle = rnd > 0.6 ? '#7a5234' : rnd > 0.25 ? '#68452b' : '#331f13';
+    sctx.fillStyle = rnd > 0.6 ? '#926543' : rnd > 0.25 ? '#805436' : '#563520';
     sctx.beginPath();
     sctx.arc(px, py, radius, 0, Math.PI * 2);
     sctx.fill();
@@ -257,9 +258,9 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
   const soilMat = new THREE.MeshStandardMaterial({
     map: soilTex,
     bumpMap: soilTex,
-    bumpScale: 0.025, // 自然颗粒立体感
-    roughness: 0.94,
-    color: 0x6e492e,
+    bumpScale: 0.035, // 自然多孔颗粒立体感
+    roughness: 0.88,
+    color: 0xffffff, // 保持贴图本色，绝杀死黑
   });
 
   // ===== 彻底消灭失控大黑球：构建精准低缓微凸抛物线赤玉土面 =====
@@ -320,39 +321,41 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
   moundMesh.receiveShadow = true;
   scene.add(moundMesh);
 
-  // 4. 双层丝绒青苔微观材质与自然贴地群落 (Velvet Living Moss)
+  // 4. 双层丝绒微绒青苔渗润贴图 (羽化渗透，消灭“黄瓜片”)
   const mossCanvas = document.createElement('canvas');
   mossCanvas.width = 256;
   mossCanvas.height = 256;
   const mctx = mossCanvas.getContext('2d')!;
-  const mgrad = mctx.createRadialGradient(128, 128, 20, 128, 128, 128);
-  mgrad.addColorStop(0, '#7ac428');
-  mgrad.addColorStop(0.65, '#52961e');
-  mgrad.addColorStop(1, '#2c5e12');
+  const mgrad = mctx.createRadialGradient(128, 128, 10, 128, 128, 122);
+  mgrad.addColorStop(0, 'rgba(125, 202, 42, 0.95)');
+  mgrad.addColorStop(0.45, 'rgba(84, 156, 32, 0.85)');
+  mgrad.addColorStop(0.75, 'rgba(44, 94, 18, 0.45)');
+  mgrad.addColorStop(1.0, 'rgba(44, 94, 18, 0.0)');
   mctx.fillStyle = mgrad;
   mctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 2000; i++) {
-    mctx.fillStyle = Math.random() > 0.5 ? 'rgba(145, 225, 60, 0.35)' : 'rgba(35, 75, 18, 0.3)';
+  for (let i = 0; i < 2400; i++) {
+    mctx.fillStyle = Math.random() > 0.5 ? 'rgba(155, 235, 70, 0.35)' : 'rgba(35, 75, 18, 0.25)';
     mctx.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
   }
   const mossTex = new THREE.CanvasTexture(mossCanvas);
 
   const mossMat = new THREE.MeshStandardMaterial({
     map: mossTex,
-    bumpMap: mossTex,
-    bumpScale: 0.015,
-    roughness: 0.96,
+    transparent: true,
+    opacity: 0.92,
+    depthWrite: false,
+    roughness: 0.95,
   });
 
-  // 青苔自然贴附在土丘表层 (严禁悬空或突兀大球)
-  for (let i = 0; i < 14; i++) {
-    const angle = (i * Math.PI * 2) / 14 + (Math.random() - 0.5) * 0.4;
-    const dist = 0.08 + Math.random() * 0.22;
+  // 青苔自然贴附渗润于树根根颈周围土面
+  for (let i = 0; i < 18; i++) {
+    const angle = (i * Math.PI * 2) / 18 + (Math.random() - 0.5) * 0.35;
+    const dist = 0.06 + Math.random() * 0.24;
     const u = dist / soilRadiusX;
-    const mossY = 0.178 - 0.022 * Math.pow(u, 1.8) + 0.003;
+    const mossY = 0.178 - 0.022 * Math.pow(u, 1.8) + 0.002;
 
-    const patchRadius = 0.045 + Math.random() * 0.04;
-    const mossGeom = new THREE.CircleGeometry(patchRadius, 16);
+    const patchRadius = 0.055 + Math.random() * 0.05;
+    const mossGeom = new THREE.PlaneGeometry(patchRadius * 2, patchRadius * 1.6);
     mossGeom.rotateX(-Math.PI / 2);
     const moss = new THREE.Mesh(mossGeom, mossMat);
     moss.position.set(
@@ -360,6 +363,7 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
       mossY,
       Math.sin(angle) * dist * (soilRadiusZ / soilRadiusX)
     );
+    moss.rotation.y = Math.random() * Math.PI;
     moss.receiveShadow = true;
     scene.add(moss);
   }
@@ -367,8 +371,8 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
   // 5. 抓地盘曲的八方主露根 (Nebari Buttress Roots)
   // 从树干根颈 (0, 0.165, 0) 苍劲外撇，紧贴低缓土面延伸并隐没于赤玉土中
   const rootMat = new THREE.MeshStandardMaterial({
-    color: 0x483d34,
-    roughness: 0.88,
+    color: 0x6e6154,
+    roughness: 0.84,
   });
   const rootAngles = [0.12, 0.88, 1.68, 2.52, 3.28, 4.02, 4.82, 5.58];
 

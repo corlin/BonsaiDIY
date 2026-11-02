@@ -56,7 +56,8 @@ export class TreeRenderer {
     });
 
     // 预构建标准夏栎微卷立体单叶网格 (法向恒定朝天 +Y，叶柄在原点，叶尖向 +Z 延伸)
-    this.leafGeometry = this.createFlatOakLeafGeometry(0.042, 0.068);
+    // 依据名品夏栎控叶尺度：长 5.5cm × 宽 3.4cm
+    this.leafGeometry = this.createFlatOakLeafGeometry(0.034, 0.055);
   }
 
   public updateTree(buffer: Float32Array): void {
@@ -329,18 +330,18 @@ export class TreeRenderer {
   }
 
   /**
-   * 1:1 还原参考图中的“水平叠瓦状微拱向阳枝托云片”：
-   * 彻底消灭垂直刀片与墓碑状站立！
-   * 单叶以平展姿态错落叠瓦，叶尖向外微垂，叶面迎向天空与阳光
+   * 1:1 还原参考图中的“水平叠瓦状微拱向阳实心枝托云片”：
+   * 彻底消灭空心甜甜圈与垂直刀片！
+   * 单叶从细梢中心无死区紧密向外辐射叠瓦，中心饱满厚实，边缘叶尖微垂微卷
    */
   private attachOakFoliagePad(seg: TreeSegmentRenderData): void {
-    const leafCount = 30; // 丰满优雅的云托厚度
-    const padRadiusX = 0.22;
-    const padRadiusZ = 0.16;
+    const leafCount = 34; // 丰满致密的经典名木枝托厚度
+    const padRadiusX = 0.20;
+    const padRadiusZ = 0.15;
 
     const branchDir = new THREE.Vector3().subVectors(seg.end, seg.start).normalize();
-    // 枝托中心位于梢头略偏外侧
-    const padCenter = seg.end.clone().addScaledVector(branchDir, 0.04);
+    // 枝托中心位于细梢端点偏外侧
+    const padCenter = seg.end.clone().addScaledVector(branchDir, 0.035);
 
     // 水平枝托基向量
     const up = new THREE.Vector3(0, 1, 0);
@@ -350,19 +351,20 @@ export class TreeRenderer {
     }
     const forward = new THREE.Vector3().crossVectors(right, up).normalize();
 
-    // 双层错落叠瓦状分布 (Bottom Tier & Top Tier)
+    // 双层错落致密叠瓦状分布 (Bottom Tier & Top Tier)
     for (let i = 0; i < leafCount; i++) {
-      const isTopTier = i >= 14;
-      const tierHeight = isTopTier ? 0.024 : 0.002;
-      const maxRadiusRatio = isTopTier ? 0.72 : 1.0;
+      const isTopTier = i >= 16;
+      const tierHeight = isTopTier ? 0.022 : 0.002;
+      const maxRadiusRatio = isTopTier ? 0.75 : 1.0;
 
-      const angle = (i * Math.PI * 2) / (isTopTier ? 16 : 14) + (Math.random() - 0.5) * 0.35;
-      const distRatio = (Math.sqrt(Math.random()) * 0.65 + 0.35) * maxRadiusRatio;
+      const angle = (i * Math.PI * 2) / (isTopTier ? 18 : 16) + (Math.random() - 0.5) * 0.35;
+      // 彻底消除内圈死区：从中心 r=0 到边缘均匀致密覆盖
+      const distRatio = Math.sqrt(Math.random()) * maxRadiusRatio;
 
       const offsetX = Math.cos(angle) * padRadiusX * distRatio;
       const offsetZ = Math.sin(angle) * padRadiusZ * distRatio;
-      // 枝托呈整体微拱伞房状 (中心略高，边缘微垂)
-      const domeDrop = -Math.pow(distRatio, 2) * 0.016;
+      // 枝托整体微拱伞房状 (中心略微隆起，边缘自然微垂)
+      const domeDrop = -Math.pow(distRatio, 2) * 0.014;
 
       const leafPos = padCenter.clone()
         .addScaledVector(right, offsetX)
@@ -373,20 +375,25 @@ export class TreeRenderer {
       leafMesh.position.copy(leafPos);
 
       // 单叶朝向计算：
-      // 叶片平展向阳，叶尖沿径向向外展开
-      const outwardDir = new THREE.Vector3()
-        .addScaledVector(right, offsetX)
-        .addScaledVector(forward, offsetZ)
-        .normalize();
+      // 叶尖沿径向向外展开，若在中心则沿分枝向前舒展
+      let outwardDir: THREE.Vector3;
+      if (Math.hypot(offsetX, offsetZ) > 0.015) {
+        outwardDir = new THREE.Vector3()
+          .addScaledVector(right, offsetX)
+          .addScaledVector(forward, offsetZ)
+          .normalize();
+      } else {
+        outwardDir = forward.clone();
+      }
 
-      const yawAngle = Math.atan2(outwardDir.x, outwardDir.z) + (Math.random() - 0.5) * 0.3;
+      const yawAngle = Math.atan2(outwardDir.x, outwardDir.z) + (Math.random() - 0.5) * 0.28;
       leafMesh.rotation.y = yawAngle;
 
       // 叠加向阳微仰角与叶尖微垂微拱 (绝不垂直立起)
-      leafMesh.rotation.x = 0.12 + Math.random() * 0.12; // 俯倾 7°~14°
-      leafMesh.rotation.z = (Math.random() - 0.5) * 0.14; // 侧向微卷 ±4°
+      leafMesh.rotation.x = 0.10 + Math.random() * 0.12; // 俯倾 6°~13°
+      leafMesh.rotation.z = (Math.random() - 0.5) * 0.12; // 侧向微卷 ±3.5°
 
-      const scale = 0.92 + Math.random() * 0.22;
+      const scale = 0.94 + Math.random() * 0.18;
       leafMesh.scale.set(scale, scale, scale);
 
       leafMesh.castShadow = true;

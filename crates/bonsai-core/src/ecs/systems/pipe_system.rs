@@ -45,11 +45,13 @@ pub fn run_pipe_model_system(world: &mut BonsaiWorld, base_exponent: f32, min_te
             if hier.order == 0 {
                 let is_base = hier.parent.is_none();
                 let flare = if is_base { 1.35 } else { 1.15 };
-                parent_r = (parent_r * flare).clamp(if is_base { 0.065 } else { 0.042 }, 0.082);
+                parent_r = (parent_r * flare).clamp(if is_base { 0.065 } else { 0.038 }, 0.082);
             } else if hier.order == 1 {
-                parent_r = parent_r.clamp(0.024, 0.045);
+                parent_r = parent_r.clamp(0.022, 0.038);
+            } else if hier.order == 2 {
+                parent_r = parent_r.clamp(0.012, 0.022);
             } else {
-                parent_r = parent_r.clamp(0.010, 0.025);
+                parent_r = parent_r.clamp(0.007, 0.014);
             }
 
             if let Some(geom) = world.geometries.get_mut(&ent) {
