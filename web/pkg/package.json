@@ -1,0 +1,15 @@
+{
+  "name": "bonsai-core",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "bonsai_core_bg.wasm",
+    "bonsai_core.js",
+    "bonsai_core.d.ts"
+  ],
+  "main": "bonsai_core.js",
+  "types": "bonsai_core.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
