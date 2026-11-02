@@ -190,67 +190,67 @@ impl BonsaiWorld {
     pub fn init_aged_oak_moyogi(&mut self) {
         self.clear();
 
-        // 1. 雄浑粗壮主干 (Order 0, 树高梯度收尖)
-        let trunk_base = self.spawn_internode([0.0, 0.28, 0.0], [0.01, 0.48, -0.01], 0.135, 0, None, 0);
-        let trunk_mid = self.spawn_internode([0.01, 0.48, -0.01], [-0.03, 0.75, 0.02], 0.105, 0, Some(trunk_base), 0);
-        let trunk_crotch = self.spawn_internode([-0.03, 0.75, 0.02], [0.03, 0.98, -0.01], 0.082, 0, Some(trunk_mid), 0);
-        let trunk_apex_lower = self.spawn_internode([0.03, 0.98, -0.01], [0.04, 1.25, 0.01], 0.058, 0, Some(trunk_crotch), 0);
-        let trunk_apex_top = self.spawn_internode([0.04, 1.25, 0.01], [0.02, 1.48, -0.01], 0.038, 5, Some(trunk_apex_lower), 0);
+        // 1. 雄浑粗壮主干 (Order 0, 从盆面缓坡土丘 y=0.165 出土，树高梯度收尖)
+        let trunk_base = self.spawn_internode([0.0, 0.165, 0.0], [0.01, 0.365, -0.01], 0.075, 0, None, 0);
+        let trunk_mid = self.spawn_internode([0.01, 0.365, -0.01], [-0.03, 0.625, 0.02], 0.058, 0, Some(trunk_base), 0);
+        let trunk_crotch = self.spawn_internode([-0.03, 0.625, 0.02], [0.03, 0.845, -0.01], 0.046, 0, Some(trunk_mid), 0);
+        let trunk_apex_lower = self.spawn_internode([0.03, 0.845, -0.01], [0.04, 1.095, 0.01], 0.034, 0, Some(trunk_crotch), 0);
+        let trunk_apex_top = self.spawn_internode([0.04, 1.095, 0.01], [0.02, 1.325, -0.01], 0.022, 5, Some(trunk_apex_lower), 0);
 
         // 2. 第一大主枝托 (Sashi-Eda, 树高38%向左苍劲平展微垂)
-        let b1 = self.spawn_internode([0.03, 0.98, -0.01], [-0.32, 0.94, 0.04], 0.052, 1, Some(trunk_crotch), 1);
-        let b1_drop = self.spawn_internode([-0.32, 0.94, 0.04], [-0.58, 0.88, 0.08], 0.038, 1, Some(b1), 2);
-        let b1_sub1 = self.spawn_internode([-0.58, 0.88, 0.08], [-0.76, 0.85, 0.12], 0.026, 1, Some(b1_drop), 3);
-        let b1_sub1_tip = self.spawn_internode([-0.76, 0.85, 0.12], [-0.88, 0.82, 0.14], 0.018, 1, Some(b1_sub1), 4);
-        let b1_sub2 = self.spawn_internode([-0.58, 0.88, 0.08], [-0.62, 0.96, -0.06], 0.024, 1, Some(b1_drop), 3);
-        let b1_sub2_tip = self.spawn_internode([-0.62, 0.96, -0.06], [-0.74, 0.98, -0.08], 0.017, 1, Some(b1_sub2), 4);
+        let b1 = self.spawn_internode([0.03, 0.845, -0.01], [-0.32, 0.815, 0.04], 0.032, 1, Some(trunk_crotch), 1);
+        let b1_drop = self.spawn_internode([-0.32, 0.815, 0.04], [-0.58, 0.765, 0.08], 0.024, 1, Some(b1), 2);
+        let b1_sub1 = self.spawn_internode([-0.58, 0.765, 0.08], [-0.76, 0.735, 0.12], 0.018, 1, Some(b1_drop), 3);
+        let b1_sub1_tip = self.spawn_internode([-0.76, 0.735, 0.12], [-0.88, 0.715, 0.14], 0.012, 1, Some(b1_sub1), 4);
+        let b1_sub2 = self.spawn_internode([-0.58, 0.765, 0.08], [-0.62, 0.835, -0.06], 0.016, 1, Some(b1_drop), 3);
+        let b1_sub2_tip = self.spawn_internode([-0.62, 0.835, -0.06], [-0.74, 0.855, -0.08], 0.011, 1, Some(b1_sub2), 4);
 
         // 挂载第一大主枝梢头平展叶托 (Foliage Pads)
-        self.spawn_foliage_pad(b1_sub1_tip, [-0.88, 0.82, 0.14], [0.0, 1.0, 0.0], 26, [0.24, 0.18]);
-        self.spawn_foliage_pad(b1_sub2_tip, [-0.74, 0.98, -0.08], [0.0, 1.0, 0.0], 22, [0.20, 0.16]);
+        self.spawn_foliage_pad(b1_sub1_tip, [-0.88, 0.715, 0.14], [0.0, 1.0, 0.0], 28, [0.25, 0.18]);
+        self.spawn_foliage_pad(b1_sub2_tip, [-0.74, 0.855, -0.08], [0.0, 1.0, 0.0], 24, [0.22, 0.16]);
 
         // 3. 右侧下层平衡副枝 (Uke-Eda)
-        let b2 = self.spawn_internode([0.03, 0.98, -0.01], [0.35, 1.04, -0.05], 0.046, 2, Some(trunk_crotch), 1);
-        let b2_sub1 = self.spawn_internode([0.35, 1.04, -0.05], [0.62, 1.06, -0.10], 0.032, 2, Some(b2), 2);
-        let b2_sub1_tip = self.spawn_internode([0.62, 1.06, -0.10], [0.80, 1.05, -0.12], 0.022, 2, Some(b2_sub1), 3);
-        let b2_sub2 = self.spawn_internode([0.35, 1.04, -0.05], [0.48, 1.15, 0.12], 0.028, 2, Some(b2), 2);
-        let b2_sub2_tip = self.spawn_internode([0.48, 1.15, 0.12], [0.65, 1.18, 0.18], 0.018, 2, Some(b2_sub2), 3);
+        let b2 = self.spawn_internode([0.03, 0.845, -0.01], [0.35, 0.905, -0.05], 0.028, 2, Some(trunk_crotch), 1);
+        let b2_sub1 = self.spawn_internode([0.35, 0.905, -0.05], [0.62, 0.925, -0.10], 0.020, 2, Some(b2), 2);
+        let b2_sub1_tip = self.spawn_internode([0.62, 0.925, -0.10], [0.80, 0.915, -0.12], 0.014, 2, Some(b2_sub1), 3);
+        let b2_sub2 = self.spawn_internode([0.35, 0.905, -0.05], [0.48, 1.015, 0.12], 0.018, 2, Some(b2), 2);
+        let b2_sub2_tip = self.spawn_internode([0.48, 1.015, 0.12], [0.65, 1.045, 0.18], 0.012, 2, Some(b2_sub2), 3);
 
-        self.spawn_foliage_pad(b2_sub1_tip, [0.80, 1.05, -0.12], [0.0, 1.0, 0.0], 24, [0.22, 0.16]);
-        self.spawn_foliage_pad(b2_sub2_tip, [0.65, 1.18, 0.18], [0.0, 1.0, 0.0], 20, [0.18, 0.14]);
+        self.spawn_foliage_pad(b2_sub1_tip, [0.80, 0.915, -0.12], [0.0, 1.0, 0.0], 26, [0.24, 0.17]);
+        self.spawn_foliage_pad(b2_sub2_tip, [0.65, 1.045, 0.18], [0.0, 1.0, 0.0], 22, [0.20, 0.15]);
 
         // 4. 后背深景枝 (Back Branch) 与前方立体枝 (Front Branch)
-        let b3_back = self.spawn_internode([0.04, 1.25, 0.01], [-0.08, 1.18, -0.32], 0.035, 3, Some(trunk_apex_lower), 1);
-        let b3_back_sub = self.spawn_internode([-0.08, 1.18, -0.32], [-0.18, 1.34, -0.60], 0.022, 3, Some(b3_back), 2);
-        self.spawn_foliage_pad(b3_back_sub, [-0.18, 1.34, -0.60], [0.0, 1.0, 0.0], 22, [0.20, 0.16]);
+        let b3_back = self.spawn_internode([0.04, 1.095, 0.01], [-0.08, 1.035, -0.32], 0.022, 3, Some(trunk_apex_lower), 1);
+        let b3_back_sub = self.spawn_internode([-0.08, 1.035, -0.32], [-0.18, 1.185, -0.60], 0.014, 3, Some(b3_back), 2);
+        self.spawn_foliage_pad(b3_back_sub, [-0.18, 1.185, -0.60], [0.0, 1.0, 0.0], 24, [0.22, 0.16]);
 
-        let b4_front = self.spawn_internode([0.04, 1.25, 0.01], [0.18, 1.22, 0.22], 0.032, 4, Some(trunk_apex_lower), 1);
-        let b4_front_sub = self.spawn_internode([0.18, 1.22, 0.22], [0.38, 1.30, 0.35], 0.020, 4, Some(b4_front), 2);
-        self.spawn_foliage_pad(b4_front_sub, [0.38, 1.30, 0.35], [0.0, 1.0, 0.0], 18, [0.18, 0.14]);
+        let b4_front = self.spawn_internode([0.04, 1.095, 0.01], [0.18, 1.075, 0.22], 0.020, 4, Some(trunk_apex_lower), 1);
+        let b4_front_sub = self.spawn_internode([0.18, 1.075, 0.22], [0.38, 1.145, 0.35], 0.014, 4, Some(b4_front), 2);
+        self.spawn_foliage_pad(b4_front_sub, [0.38, 1.145, 0.35], [0.0, 1.0, 0.0], 20, [0.19, 0.15]);
 
         // 5. 中上层舒展小分枝
-        let b5_l = self.spawn_internode([0.04, 1.25, 0.01], [-0.28, 1.36, 0.02], 0.030, 1, Some(trunk_apex_lower), 1);
-        let b5_l_tip = self.spawn_internode([-0.28, 1.36, 0.02], [-0.55, 1.44, 0.06], 0.018, 1, Some(b5_l), 2);
-        self.spawn_foliage_pad(b5_l_tip, [-0.55, 1.44, 0.06], [0.0, 1.0, 0.0], 22, [0.20, 0.15]);
+        let b5_l = self.spawn_internode([0.04, 1.095, 0.01], [-0.28, 1.205, 0.02], 0.020, 1, Some(trunk_apex_lower), 1);
+        let b5_l_tip = self.spawn_internode([-0.28, 1.205, 0.02], [-0.55, 1.285, 0.06], 0.012, 1, Some(b5_l), 2);
+        self.spawn_foliage_pad(b5_l_tip, [-0.55, 1.285, 0.06], [0.0, 1.0, 0.0], 24, [0.22, 0.16]);
 
-        let b6_r = self.spawn_internode([0.04, 1.25, 0.01], [0.26, 1.40, -0.04], 0.028, 2, Some(trunk_apex_lower), 1);
-        let b6_r_tip = self.spawn_internode([0.26, 1.40, -0.04], [0.52, 1.48, -0.07], 0.018, 2, Some(b6_r), 2);
-        self.spawn_foliage_pad(b6_r_tip, [0.52, 1.48, -0.07], [0.0, 1.0, 0.0], 20, [0.19, 0.14]);
+        let b6_r = self.spawn_internode([0.04, 1.095, 0.01], [0.26, 1.245, -0.04], 0.018, 2, Some(trunk_apex_lower), 1);
+        let b6_r_tip = self.spawn_internode([0.26, 1.245, -0.04], [0.52, 1.325, -0.07], 0.012, 2, Some(b6_r), 2);
+        self.spawn_foliage_pad(b6_r_tip, [0.52, 1.325, -0.07], [0.0, 1.0, 0.0], 22, [0.21, 0.15]);
 
         // 6. 顶端伞房冠顶 (Apex Dome)
-        let apex_l = self.spawn_internode([0.02, 1.48, -0.01], [-0.18, 1.68, 0.05], 0.024, 5, Some(trunk_apex_top), 1);
-        self.spawn_foliage_pad(apex_l, [-0.18, 1.68, 0.05], [0.0, 1.0, 0.0], 24, [0.21, 0.16]);
+        let apex_l = self.spawn_internode([0.02, 1.325, -0.01], [-0.18, 1.505, 0.05], 0.016, 5, Some(trunk_apex_top), 1);
+        self.spawn_foliage_pad(apex_l, [-0.18, 1.505, 0.05], [0.0, 1.0, 0.0], 26, [0.23, 0.17]);
 
-        let apex_r = self.spawn_internode([0.02, 1.48, -0.01], [0.18, 1.70, -0.04], 0.022, 5, Some(trunk_apex_top), 1);
-        self.spawn_foliage_pad(apex_r, [0.18, 1.70, -0.04], [0.0, 1.0, 0.0], 22, [0.20, 0.15]);
+        let apex_r = self.spawn_internode([0.02, 1.325, -0.01], [0.18, 1.525, -0.04], 0.015, 5, Some(trunk_apex_top), 1);
+        self.spawn_foliage_pad(apex_r, [0.18, 1.525, -0.04], [0.0, 1.0, 0.0], 24, [0.22, 0.16]);
 
-        let apex_c = self.spawn_internode([0.02, 1.48, -0.01], [0.01, 1.82, 0.01], 0.020, 5, Some(trunk_apex_top), 1);
-        self.spawn_foliage_pad(apex_c, [0.01, 1.82, 0.01], [0.0, 1.0, 0.0], 26, [0.22, 0.18]);
+        let apex_c = self.spawn_internode([0.02, 1.325, -0.01], [0.01, 1.625, 0.01], 0.014, 5, Some(trunk_apex_top), 1);
+        self.spawn_foliage_pad(apex_c, [0.01, 1.625, 0.01], [0.0, 1.0, 0.0], 28, [0.24, 0.18]);
 
         // 7. 在骨干主枝关键截剪点植入休眠潜伏芽 (Dormant Buds)
-        self.spawn_bud(b1, [-0.28, 0.95, 0.06], [-0.8, 0.2, 0.3]);
-        self.spawn_bud(b2, [0.32, 1.05, -0.04], [0.7, 0.3, -0.2]);
-        self.spawn_bud(trunk_apex_lower, [0.02, 1.26, 0.08], [0.1, 0.8, 0.4]);
+        self.spawn_bud(b1, [-0.28, 0.825, 0.06], [-0.8, 0.2, 0.3]);
+        self.spawn_bud(b2, [0.32, 0.915, -0.04], [0.7, 0.3, -0.2]);
+        self.spawn_bud(trunk_apex_lower, [0.02, 1.105, 0.08], [0.1, 0.8, 0.4]);
 
         self.ensure_topology_cache();
     }

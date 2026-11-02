@@ -123,7 +123,7 @@ fn test_ecs_wire_fixture() {
     world.init_aged_oak_moyogi();
 
     let target_id = 7;
-    let geom = world.geometries.values().find(|g| world.geometries.keys().any(|e| e.id == target_id)).unwrap();
+    let geom = world.geometries.iter().find(|(e, _)| e.id == target_id).map(|(_, g)| g).unwrap();
     let branch_dia_mm = geom.radius * 2.0 * 1000.0;
     let min_gauge = branch_dia_mm * 0.33;
 

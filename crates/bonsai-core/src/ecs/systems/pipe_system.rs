@@ -7,7 +7,7 @@ use crate::ecs::world::BonsaiWorld;
 pub fn run_pipe_model_system(world: &mut BonsaiWorld, base_exponent: f32, min_terminal_radius: f32) {
     world.ensure_topology_cache();
 
-    // 复制自底向上队列以规避可变借用冲突
+    // 复制自底向上队列以规避借用冲突
     let bottom_up: Vec<_> = world.topology.bottom_up_order.clone();
 
     for &ent in &bottom_up {
@@ -17,11 +17,16 @@ pub fn run_pipe_model_system(world: &mut BonsaiWorld, base_exponent: f32, min_te
 
         if hier.children.is_empty() {
             // 末端小枝梢头：赋予基准微观半径
+            let terminal_r = if min_terminal_radius > 0.0 {
+                min_terminal_radius
+            } else {
+                world.geometries.get(&ent).map(|g| g.radius).unwrap_or(0.010)
+            };
             if let Some(geom) = world.geometries.get_mut(&ent) {
-                geom.radius = min_terminal_radius;
+                geom.radius = terminal_r;
             }
             if let Some(pipe) = world.vascular_pipes.get_mut(&ent) {
-                pipe.effective_area = std::f32::consts::PI * min_terminal_radius * min_terminal_radius;
+                pipe.effective_area = std::f32::consts::PI * terminal_r * terminal_r;
             }
         } else {
             // 分枝节点：汇聚所有子分枝的截面积
@@ -36,11 +41,15 @@ pub fn run_pipe_model_system(world: &mut BonsaiWorld, base_exponent: f32, min_te
 
             let mut parent_r = sum_r_pow.powf(1.0 / exp);
 
-            // 主干下盘基底给予膨大老桩加权 (Nebari Trunk Flare)
+            // 主干收尖梯度与地径合理放样约束 (对标真实参考图：地径约 13~15cm，中干约 10cm)
             if hier.order == 0 {
                 let is_base = hier.parent.is_none();
-                let flare = if is_base { 2.1 } else { 1.4 };
-                parent_r = (parent_r * flare).max(if is_base { 0.125 } else { 0.075 });
+                let flare = if is_base { 1.35 } else { 1.15 };
+                parent_r = (parent_r * flare).clamp(if is_base { 0.065 } else { 0.042 }, 0.082);
+            } else if hier.order == 1 {
+                parent_r = parent_r.clamp(0.024, 0.045);
+            } else {
+                parent_r = parent_r.clamp(0.010, 0.025);
             }
 
             if let Some(geom) = world.geometries.get_mut(&ent) {

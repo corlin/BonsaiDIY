@@ -19,9 +19,9 @@ export function createScene(
   onAnimate?: (elapsedSeconds: number) => void
 ): SceneContext {
   const scene = new THREE.Scene();
-  // 1:1 还原参考图中纯净高雅的展厅暖白微米灰背景
-  scene.background = new THREE.Color(0xf2f0eb);
-  scene.fog = new THREE.FogExp2(0xf2f0eb, 0.035);
+  // 1:1 还原名家盆景展厅高雅的暖灰纯净微米背景
+  scene.background = new THREE.Color(0xf4f1eb);
+  scene.fog = new THREE.FogExp2(0xf4f1eb, 0.032);
 
   const camera = new THREE.PerspectiveCamera(
     34,
@@ -30,7 +30,7 @@ export function createScene(
     50
   );
   // 正面黄金微俯视鉴赏视角：完美包揽从盆面青苔根盘到顶冠各层枝托
-  camera.position.set(0, 1.30, 3.35);
+  camera.position.set(0, 1.25, 3.25);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setSize(container.clientWidth, container.clientHeight);
@@ -44,14 +44,14 @@ export function createScene(
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
-  controls.target.set(0, 0.90, 0); // 焦点对准第一大主枝托出枝核心
+  controls.target.set(0, 0.88, 0); // 焦点对准第一主枝托与主干出枝中枢
   controls.maxPolarAngle = Math.PI / 2 - 0.02; // 禁止穿透展台地面
   controls.minDistance = 1.1;
   controls.maxDistance = 5.5;
 
   // ===== 高端名家盆景展漫射布光 =====
   // 1. 柔和白色漫射天光 (避免任何死黑死暗)
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.90);
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.92);
   scene.add(ambientLight);
 
   // 2. 右上方斜射主暖光 (打出树皮深纵纹高光与叶片透光感)
@@ -79,7 +79,7 @@ export function createScene(
   fillLight.position.set(0, -2, 2.0);
   scene.add(fillLight);
 
-  // ===== 1:1 还原参考图中的宜兴紫砂椭圆浅盆、红褐赤玉土馒头丘与八方苍老露根 =====
+  // ===== 1:1 还原参考图中的宜兴紫砂椭圆浅盆、低缓微凸赤玉土与八方苍劲龙爪露根 =====
   setupReferencePotAndMound(scene);
 
   const setSeasonLighting = (season: string) => {
@@ -141,7 +141,7 @@ export function createScene(
 }
 
 /**
- * 还原参考图中宜兴深紫泥“梨皮调砂”椭圆浅盆、赤玉土颗粒堆、八方露根与双层青苔
+ * 还原参考图中宜兴深紫泥“梨皮调砂”椭圆浅盆、低平缓坡赤玉土颗粒堆与八方苍劲露根
  */
 function setupReferencePotAndMound(scene: THREE.Scene): void {
   // 1. 展台纯净米白底板与阴影接收面
@@ -174,7 +174,7 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
   potCanvas.width = 512;
   potCanvas.height = 512;
   const pctx = potCanvas.getContext('2d')!;
-  pctx.fillStyle = '#422e25'; // 深紫泥深栗紫褐基底
+  pctx.fillStyle = '#3e2c24'; // 深紫泥深栗紫褐基底
   pctx.fillRect(0, 0, 512, 512);
   // 梨皮调砂细微矿物颗粒
   for (let i = 0; i < 3500; i++) {
@@ -235,16 +235,16 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
   soilCanvas.width = 1024;
   soilCanvas.height = 1024;
   const sctx = soilCanvas.getContext('2d')!;
-  sctx.fillStyle = '#4c3321'; // 深红褐底色
+  sctx.fillStyle = '#5c3d26'; // 纯正红褐赤玉土底色
   sctx.fillRect(0, 0, 1024, 1024);
 
-  // 细碎颗粒凹凸感（粒径 2~5mm 尺度，红褐、肉桂褐与深炭黑阴影缝隙交织）
-  for (let i = 0; i < 4800; i++) {
+  // 细碎颗粒凹凸感（粒径 2~5mm 尺度，肉桂褐、陶土褐与阴影缝隙交织）
+  for (let i = 0; i < 5200; i++) {
     const px = Math.random() * 1024;
     const py = Math.random() * 1024;
     const radius = 2.0 + Math.random() * 4.5;
     const rnd = Math.random();
-    sctx.fillStyle = rnd > 0.6 ? '#6e492e' : rnd > 0.25 ? '#573822' : '#28170c';
+    sctx.fillStyle = rnd > 0.6 ? '#7a5234' : rnd > 0.25 ? '#68452b' : '#331f13';
     sctx.beginPath();
     sctx.arc(px, py, radius, 0, Math.PI * 2);
     sctx.fill();
@@ -254,34 +254,85 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
   soilTex.wrapT = THREE.RepeatWrapping;
   soilTex.repeat.set(4, 4);
 
-  const moundGeom = new THREE.SphereGeometry(potRadiusX * 0.96, 48, 24, 0, Math.PI * 2, 0, Math.PI * 0.36);
-  moundGeom.scale(1.0, 0.36, potRadiusZ / potRadiusX);
   const soilMat = new THREE.MeshStandardMaterial({
     map: soilTex,
     bumpMap: soilTex,
-    bumpScale: 0.045, // 强力多孔颗粒立体感
-    roughness: 0.95,
+    bumpScale: 0.025, // 自然颗粒立体感
+    roughness: 0.94,
+    color: 0x6e492e,
   });
-  const mound = new THREE.Mesh(moundGeom, soilMat);
-  mound.position.y = potBaseY + potHeight - 0.01;
-  mound.receiveShadow = true;
-  scene.add(mound);
 
-  // 4. 双层丝绒青苔微观材质 (Velvet Living Moss)
-  // 顶层鲜嫩黄绿与底层深翠绿双层交织
+  // ===== 彻底消灭失控大黑球：构建精准低缓微凸抛物线赤玉土面 =====
+  // 盆沿高度 potLipY = potBaseY + potHeight + 0.02 = 0.165
+  // 土面内侧边缘 y_edge = 0.156 (低于盆沿 9mm，符合保水防溢标准)
+  // 土面中心最高点 y_center = 0.178 (仅高出边缘 2.2cm，低缓优雅平铺，严禁高耸黑保龄球)
+  const soilRadiusX = potRadiusX * 0.96;
+  const soilRadiusZ = potRadiusZ * 0.96;
+  const radialRings = 24;
+  const angularSlices = 64;
+  const moundVertices: number[] = [];
+  const moundNormals: number[] = [];
+  const moundUvs: number[] = [];
+  const moundIndices: number[] = [];
+
+  for (let r = 0; r <= radialRings; r++) {
+    const u = r / radialRings; // 0 (中心) -> 1 (盆口边缘)
+    const currentHeight = 0.178 - 0.022 * Math.pow(u, 1.8);
+    const rx = u * soilRadiusX;
+    const rz = u * soilRadiusZ;
+
+    for (let s = 0; s <= angularSlices; s++) {
+      const theta = (s / angularSlices) * Math.PI * 2;
+      const x = rx * Math.cos(theta);
+      const z = rz * Math.sin(theta);
+      const y = currentHeight;
+
+      moundVertices.push(x, y, z);
+
+      // 法线：中心竖直朝上，边缘微斜
+      const slope = -0.022 * 1.8 * Math.pow(u, 0.8) / (soilRadiusX + 1e-4);
+      const nx = -Math.cos(theta) * slope;
+      const nz = -Math.sin(theta) * slope;
+      const ny = 1.0;
+      const normLen = Math.hypot(nx, ny, nz);
+      moundNormals.push(nx / normLen, ny / normLen, nz / normLen);
+
+      moundUvs.push((Math.cos(theta) * u + 1) * 0.5, (Math.sin(theta) * u + 1) * 0.5);
+    }
+  }
+
+  for (let r = 0; r < radialRings; r++) {
+    for (let s = 0; s < angularSlices; s++) {
+      const row1 = r * (angularSlices + 1);
+      const row2 = (r + 1) * (angularSlices + 1);
+      moundIndices.push(row1 + s, row2 + s, row1 + s + 1);
+      moundIndices.push(row1 + s + 1, row2 + s, row2 + s + 1);
+    }
+  }
+
+  const customMoundGeom = new THREE.BufferGeometry();
+  customMoundGeom.setAttribute('position', new THREE.Float32BufferAttribute(moundVertices, 3));
+  customMoundGeom.setAttribute('normal', new THREE.Float32BufferAttribute(moundNormals, 3));
+  customMoundGeom.setAttribute('uv', new THREE.Float32BufferAttribute(moundUvs, 2));
+  customMoundGeom.setIndex(moundIndices);
+
+  const moundMesh = new THREE.Mesh(customMoundGeom, soilMat);
+  moundMesh.receiveShadow = true;
+  scene.add(moundMesh);
+
+  // 4. 双层丝绒青苔微观材质与自然贴地群落 (Velvet Living Moss)
   const mossCanvas = document.createElement('canvas');
   mossCanvas.width = 256;
   mossCanvas.height = 256;
   const mctx = mossCanvas.getContext('2d')!;
   const mgrad = mctx.createRadialGradient(128, 128, 20, 128, 128, 128);
-  mgrad.addColorStop(0, '#6bb82d');
-  mgrad.addColorStop(0.7, '#4c8a20');
-  mgrad.addColorStop(1, '#2c5a14');
+  mgrad.addColorStop(0, '#7ac428');
+  mgrad.addColorStop(0.65, '#52961e');
+  mgrad.addColorStop(1, '#2c5e12');
   mctx.fillStyle = mgrad;
   mctx.fillRect(0, 0, 256, 256);
-  // 微绒毛微点
   for (let i = 0; i < 2000; i++) {
-    mctx.fillStyle = Math.random() > 0.5 ? 'rgba(125, 205, 50, 0.35)' : 'rgba(35, 75, 18, 0.3)';
+    mctx.fillStyle = Math.random() > 0.5 ? 'rgba(145, 225, 60, 0.35)' : 'rgba(35, 75, 18, 0.3)';
     mctx.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
   }
   const mossTex = new THREE.CanvasTexture(mossCanvas);
@@ -289,46 +340,74 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
   const mossMat = new THREE.MeshStandardMaterial({
     map: mossTex,
     bumpMap: mossTex,
-    bumpScale: 0.025,
-    roughness: 0.95, // 丝绒微绒完全漫反射
+    bumpScale: 0.015,
+    roughness: 0.96,
   });
 
-  for (let i = 0; i < 16; i++) {
-    const angle = (i * Math.PI * 2) / 16 + (Math.random() - 0.5) * 0.3;
-    const dist = 0.12 + Math.random() * 0.28;
-    const mossGeom = new THREE.SphereGeometry(0.065 + Math.random() * 0.05, 12, 10);
-    mossGeom.scale(1.5, 0.28, 1.3);
+  // 青苔自然贴附在土丘表层 (严禁悬空或突兀大球)
+  for (let i = 0; i < 14; i++) {
+    const angle = (i * Math.PI * 2) / 14 + (Math.random() - 0.5) * 0.4;
+    const dist = 0.08 + Math.random() * 0.22;
+    const u = dist / soilRadiusX;
+    const mossY = 0.178 - 0.022 * Math.pow(u, 1.8) + 0.003;
+
+    const patchRadius = 0.045 + Math.random() * 0.04;
+    const mossGeom = new THREE.CircleGeometry(patchRadius, 16);
+    mossGeom.rotateX(-Math.PI / 2);
     const moss = new THREE.Mesh(mossGeom, mossMat);
     moss.position.set(
       Math.cos(angle) * dist,
-      potBaseY + potHeight + 0.135 - dist * 0.14,
-      Math.sin(angle) * dist * (potRadiusZ / potRadiusX)
+      mossY,
+      Math.sin(angle) * dist * (soilRadiusZ / soilRadiusX)
     );
     moss.receiveShadow = true;
     scene.add(moss);
   }
 
   // 5. 抓地盘曲的八方主露根 (Nebari Buttress Roots)
+  // 从树干根颈 (0, 0.165, 0) 苍劲外撇，紧贴低缓土面延伸并隐没于赤玉土中
   const rootMat = new THREE.MeshStandardMaterial({
-    color: 0x463d35,
+    color: 0x483d34,
     roughness: 0.88,
   });
-  const rootAngles = [0.15, 0.95, 1.85, 2.75, 3.65, 4.45, 5.25, 5.95];
+  const rootAngles = [0.12, 0.88, 1.68, 2.52, 3.28, 4.02, 4.82, 5.58];
+
   for (const angle of rootAngles) {
-    const rootLen = 0.22 + Math.random() * 0.08;
-    const rootGeom = new THREE.CylinderGeometry(0.018, 0.052, rootLen, 12);
-    const root = new THREE.Mesh(rootGeom, rootMat);
-    const posX = Math.cos(angle) * (rootLen * 0.48);
-    const posZ = Math.sin(angle) * (rootLen * 0.48) * (potRadiusZ / potRadiusX);
-    root.position.set(
-      posX,
-      potBaseY + potHeight + 0.135 - rootLen * 0.22,
-      posZ
-    );
-    root.rotation.z = Math.cos(angle) * 0.72;
-    root.rotation.x = -Math.sin(angle) * 0.72;
-    root.castShadow = true;
-    root.receiveShadow = true;
-    scene.add(root);
+    const rootSpread = 0.26 + Math.random() * 0.08;
+    const points: THREE.Vector3[] = [];
+
+    // 沿土面轮廓生成平滑样条曲线
+    for (let t = 0; t <= 1.0; t += 0.25) {
+      const curDist = 0.05 + t * rootSpread;
+      const u = curDist / soilRadiusX;
+      const curY = 0.175 - 0.022 * Math.pow(u, 1.8) - t * 0.006;
+      points.push(new THREE.Vector3(
+        Math.cos(angle) * curDist,
+        curY,
+        Math.sin(angle) * curDist * (soilRadiusZ / soilRadiusX)
+      ));
+    }
+
+    const curve = new THREE.CatmullRomCurve3(points);
+    const tubeGeom = new THREE.TubeGeometry(curve, 16, 0.022, 12, false);
+
+    // 沿根系末端逐渐收窄
+    const pos = tubeGeom.attributes.position;
+    for (let k = 0; k < pos.count; k++) {
+      const p = new THREE.Vector3(pos.getX(k), pos.getY(k), pos.getZ(k));
+      const distToCenter = Math.hypot(p.x, p.z);
+      const taper = Math.max(0.35, 1.0 - (distToCenter / (rootSpread + 0.06)) * 0.65);
+      // 沿主轴微缩
+      const closestT = Math.min(1.0, Math.max(0.0, distToCenter / (rootSpread + 0.05)));
+      const centerPoint = curve.getPoint(closestT);
+      p.sub(centerPoint).multiplyScalar(taper).add(centerPoint);
+      pos.setXYZ(k, p.x, p.y, p.z);
+    }
+    tubeGeom.computeVertexNormals();
+
+    const rootMesh = new THREE.Mesh(tubeGeom, rootMat);
+    rootMesh.castShadow = true;
+    rootMesh.receiveShadow = true;
+    scene.add(rootMesh);
   }
 }
