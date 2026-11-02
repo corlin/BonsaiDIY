@@ -2,6 +2,25 @@ use std::collections::HashMap;
 
 pub type Vector3D = [f32; 3];
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Season {
+    Spring,
+    Summer,
+    Autumn,
+    Winter,
+}
+
+impl Season {
+    pub fn next(&self) -> Season {
+        match self {
+            Season::Spring => Season::Summer,
+            Season::Summer => Season::Autumn,
+            Season::Autumn => Season::Winter,
+            Season::Winter => Season::Spring,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct InternodeSegment {
     pub id: u32,
@@ -18,6 +37,9 @@ pub struct InternodeSegment {
 pub struct TreeGraph {
     pub segments: HashMap<u32, InternodeSegment>,
     pub root_id: Option<u32>,
+    pub season: Season,
+    pub energy_pool: f32,
+    pub year: u32,
     next_id: u32,
 }
 
@@ -26,6 +48,9 @@ impl TreeGraph {
         Self {
             segments: HashMap::new(),
             root_id: None,
+            season: Season::Spring,
+            energy_pool: 100.0,
+            year: 1,
             next_id: 1,
         }
     }
