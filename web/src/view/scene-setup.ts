@@ -54,7 +54,7 @@ export function createScene(
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.90);
   scene.add(ambientLight);
 
-  // 2. 右上方斜射主暖光 (打出树皮纵纹高光与叶片透光感)
+  // 2. 右上方斜射主暖光 (打出树皮深纵纹高光与叶片透光感)
   const dirLight = new THREE.DirectionalLight(0xfffdf5, 1.45);
   dirLight.position.set(2.8, 5.5, 3.5);
   dirLight.castShadow = true;
@@ -141,7 +141,7 @@ export function createScene(
 }
 
 /**
- * 还原参考图中深紫泥椭圆浅盆、馒头状赤玉土堆、八方露根与青苔
+ * 还原参考图中宜兴深紫泥“梨皮调砂”椭圆浅盆、赤玉土颗粒堆、八方露根与双层青苔
  */
 function setupReferencePotAndMound(scene: THREE.Scene): void {
   // 1. 展台纯净米白底板与阴影接收面
@@ -164,27 +164,49 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
   stand.receiveShadow = true;
   scene.add(stand);
 
-  // 2. 经典深褐紫泥椭圆浅盆 (Oval Yixing Bonsai Pot)
+  // 2. 宜兴深紫泥“梨皮调砂”微观纹理与材质
   const potRadiusX = 0.72;
   const potRadiusZ = 0.54;
   const potHeight = 0.11;
   const potBaseY = 0.035;
 
+  const potCanvas = document.createElement('canvas');
+  potCanvas.width = 512;
+  potCanvas.height = 512;
+  const pctx = potCanvas.getContext('2d')!;
+  pctx.fillStyle = '#422e25'; // 深紫泥深栗紫褐基底
+  pctx.fillRect(0, 0, 512, 512);
+  // 梨皮调砂细微矿物颗粒
+  for (let i = 0; i < 3500; i++) {
+    const px = Math.random() * 512;
+    const py = Math.random() * 512;
+    pctx.fillStyle = Math.random() > 0.4 ? 'rgba(88, 64, 54, 0.45)' : 'rgba(125, 98, 85, 0.35)';
+    pctx.fillRect(px, py, 1.5, 1.5);
+  }
+  const potTex = new THREE.CanvasTexture(potCanvas);
+  potTex.wrapS = THREE.RepeatWrapping;
+  potTex.wrapT = THREE.RepeatWrapping;
+  potTex.repeat.set(2, 2);
+
+  const potMat = new THREE.MeshStandardMaterial({
+    map: potTex,
+    bumpMap: potTex,
+    bumpScale: 0.018,
+    color: 0x48342a,
+    roughness: 0.72,
+    metalness: 0.04,
+  });
+
   const potGeom = new THREE.CylinderGeometry(1.0, 0.91, potHeight, 64);
   potGeom.scale(potRadiusX, 1.0, potRadiusZ);
 
-  const potMat = new THREE.MeshStandardMaterial({
-    color: 0x463228, // 参考图同款温润紫砂深朱褐
-    roughness: 0.78,
-    metalness: 0.04,
-  });
   const pot = new THREE.Mesh(potGeom, potMat);
   pot.position.y = potBaseY + potHeight / 2 + 0.02;
   pot.castShadow = true;
   pot.receiveShadow = true;
   scene.add(pot);
 
-  // 盆口优雅的微外翻圆润口沿 (Rolled Lip)
+  // 盆口优雅的微外翻圆润口沿 (Rolled Lip) - 产生柔和漫反射高光弧线
   const rimGeom = new THREE.TorusGeometry(1.01, 0.022, 16, 64);
   rimGeom.rotateX(Math.PI / 2);
   rimGeom.scale(potRadiusX, potRadiusZ, 1.0);
@@ -208,20 +230,21 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
     scene.add(foot);
   }
 
-  // 3. 参考图中标志性的“微凸饱满馒头状”赤玉土丘 (Akadama Mound)
-  // 生成赤玉土多孔颗粒凹凸贴图
+  // 3. 1024×1024 赤玉土多孔颗粒真凹凸置换贴图
   const soilCanvas = document.createElement('canvas');
-  soilCanvas.width = 256;
-  soilCanvas.height = 256;
+  soilCanvas.width = 1024;
+  soilCanvas.height = 1024;
   const sctx = soilCanvas.getContext('2d')!;
-  sctx.fillStyle = '#4e3522';
-  sctx.fillRect(0, 0, 256, 256);
-  // 细碎颗粒凹凸感
-  for (let i = 0; i < 1200; i++) {
-    const px = Math.random() * 256;
-    const py = Math.random() * 256;
-    const radius = 1.2 + Math.random() * 2.2;
-    sctx.fillStyle = Math.random() > 0.5 ? '#3b2615' : '#61442c';
+  sctx.fillStyle = '#4c3321'; // 深红褐底色
+  sctx.fillRect(0, 0, 1024, 1024);
+
+  // 细碎颗粒凹凸感（粒径 2~5mm 尺度，红褐、肉桂褐与深炭黑阴影缝隙交织）
+  for (let i = 0; i < 4800; i++) {
+    const px = Math.random() * 1024;
+    const py = Math.random() * 1024;
+    const radius = 2.0 + Math.random() * 4.5;
+    const rnd = Math.random();
+    sctx.fillStyle = rnd > 0.6 ? '#6e492e' : rnd > 0.25 ? '#573822' : '#28170c';
     sctx.beginPath();
     sctx.arc(px, py, radius, 0, Math.PI * 2);
     sctx.fill();
@@ -236,7 +259,7 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
   const soilMat = new THREE.MeshStandardMaterial({
     map: soilTex,
     bumpMap: soilTex,
-    bumpScale: 0.025,
+    bumpScale: 0.045, // 强力多孔颗粒立体感
     roughness: 0.95,
   });
   const mound = new THREE.Mesh(moundGeom, soilMat);
@@ -244,20 +267,41 @@ function setupReferencePotAndMound(scene: THREE.Scene): void {
   mound.receiveShadow = true;
   scene.add(mound);
 
-  // 4. 参考图中树蔸根盘四周斑驳点缀的翠绿短绒青苔小斑 (Patchy Living Moss)
+  // 4. 双层丝绒青苔微观材质 (Velvet Living Moss)
+  // 顶层鲜嫩黄绿与底层深翠绿双层交织
+  const mossCanvas = document.createElement('canvas');
+  mossCanvas.width = 256;
+  mossCanvas.height = 256;
+  const mctx = mossCanvas.getContext('2d')!;
+  const mgrad = mctx.createRadialGradient(128, 128, 20, 128, 128, 128);
+  mgrad.addColorStop(0, '#6bb82d');
+  mgrad.addColorStop(0.7, '#4c8a20');
+  mgrad.addColorStop(1, '#2c5a14');
+  mctx.fillStyle = mgrad;
+  mctx.fillRect(0, 0, 256, 256);
+  // 微绒毛微点
+  for (let i = 0; i < 2000; i++) {
+    mctx.fillStyle = Math.random() > 0.5 ? 'rgba(125, 205, 50, 0.35)' : 'rgba(35, 75, 18, 0.3)';
+    mctx.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
+  }
+  const mossTex = new THREE.CanvasTexture(mossCanvas);
+
   const mossMat = new THREE.MeshStandardMaterial({
-    color: 0x487928, // 鲜活草绿苔藓
-    roughness: 0.92,
+    map: mossTex,
+    bumpMap: mossTex,
+    bumpScale: 0.025,
+    roughness: 0.95, // 丝绒微绒完全漫反射
   });
-  for (let i = 0; i < 14; i++) {
-    const angle = (i * Math.PI * 2) / 14 + (Math.random() - 0.5) * 0.3;
+
+  for (let i = 0; i < 16; i++) {
+    const angle = (i * Math.PI * 2) / 16 + (Math.random() - 0.5) * 0.3;
     const dist = 0.12 + Math.random() * 0.28;
-    const mossGeom = new THREE.SphereGeometry(0.065 + Math.random() * 0.05, 10, 8);
+    const mossGeom = new THREE.SphereGeometry(0.065 + Math.random() * 0.05, 12, 10);
     mossGeom.scale(1.5, 0.28, 1.3);
     const moss = new THREE.Mesh(mossGeom, mossMat);
     moss.position.set(
       Math.cos(angle) * dist,
-      potBaseY + potHeight + 0.13 - dist * 0.14,
+      potBaseY + potHeight + 0.135 - dist * 0.14,
       Math.sin(angle) * dist * (potRadiusZ / potRadiusX)
     );
     moss.receiveShadow = true;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createOakLeafAtlas } from './oak-leaf-texture';
-import { createAgedOakBarkMaterial } from './bark-material';
+import { createAgedOakBarkMaterialSet, BarkMaterialSet } from './bark-material';
 
 export interface TreeSegmentRenderData {
   id: number;
@@ -11,7 +11,7 @@ export interface TreeSegmentRenderData {
 }
 
 export class TreeRenderer {
-  private barkMaterial: THREE.MeshStandardMaterial;
+  private barkSet: BarkMaterialSet;
   private leafMaterial: THREE.MeshStandardMaterial;
   public treeGroup: THREE.Group;
   public foliageGroup: THREE.Group;
@@ -39,16 +39,16 @@ export class TreeRenderer {
       scene.add(this.treeGroup);
     }
 
-    // 1. 真实古老夏栎苍劲皲裂鳞片树皮材质
-    this.barkMaterial = createAgedOakBarkMaterial();
+    // 1. 真实古老夏栎分级 PBR 树皮材质集 (老干深裂、主枝中裂、嫩枝紧致)
+    this.barkSet = createAgedOakBarkMaterialSet();
 
-    // 2. 真实夏栎波浪圆齿羽裂单叶半透明材质
+    // 2. 真实夏栎波浪圆齿羽裂单叶 (带蜡质角质层高光与背光半透明)
     const { texture: leafTex, alphaTest } = createOakLeafAtlas();
     this.leafMaterial = new THREE.MeshStandardMaterial({
       map: leafTex,
       transparent: true,
       alphaTest: alphaTest,
-      roughness: 0.52,
+      roughness: 0.42, // 植物角质层微弱蜡质光泽
       metalness: 0.02,
       side: THREE.DoubleSide,
       shadowSide: THREE.DoubleSide,
@@ -81,16 +81,17 @@ export class TreeRenderer {
 
     const segments = this.parseSegmentsBuffer(buffer);
 
-    // 1. 构建树干与枝条几何网格
+    // 1. 构建各级枝干几何网格
     for (const seg of segments) {
       const mesh = this.createSegmentMesh(seg);
       this.segmentMeshes.set(seg.id, mesh);
       this.interactiveMeshes.push(mesh);
       this.treeGroup.add(mesh);
 
-      // 分叉节点接缝圆润过渡（消除生硬圆柱棱角，呈现天然连贯木质躯干）
+      // 分叉节点接缝圆润过渡（消除生硬圆柱折角）
+      const jointMat = this.getBarkMaterialForOrder(seg.order);
       const jointGeom = new THREE.SphereGeometry(seg.radius * 1.04, 16, 16);
-      const joint = new THREE.Mesh(jointGeom, this.barkMaterial);
+      const joint = new THREE.Mesh(jointGeom, jointMat);
       joint.position.copy(seg.start);
       joint.userData = { isJoint: true, segmentId: seg.id, order: seg.order };
       joint.castShadow = true;
@@ -98,17 +99,17 @@ export class TreeRenderer {
       this.interactiveMeshes.push(joint);
       this.treeGroup.add(joint);
 
-      // 主干基底膨大膨出根盘 Collar (Bulbous Fluted Base)
+      // 主干基底膨大根盘环 (Bulbous Fluted Base)
       if (seg.order === 0 && seg.id === 0) {
-        const baseFluteGeom = new THREE.CylinderGeometry(seg.radius * 1.02, seg.radius * 1.45, 0.12, 24);
-        const baseFlute = new THREE.Mesh(baseFluteGeom, this.barkMaterial);
+        const baseFluteGeom = new THREE.CylinderGeometry(seg.radius * 1.02, seg.radius * 1.48, 0.13, 28);
+        const baseFlute = new THREE.Mesh(baseFluteGeom, this.barkSet.trunkBark);
         baseFlute.position.set(seg.start.x, seg.start.y - 0.05, seg.start.z);
         baseFlute.castShadow = true;
         baseFlute.receiveShadow = true;
         this.treeGroup.add(baseFlute);
       }
 
-      // 仅在分枝侧枝与梢头（order >= 2）挂载“透风露骨”的横向羽裂单叶枝托云片
+      // 仅在分枝侧枝与梢头（order >= 2）挂载微卷立体羽裂单叶枝托云片
       if (seg.order >= 2) {
         this.attachOakFoliagePad(seg);
       }
@@ -118,10 +119,19 @@ export class TreeRenderer {
     this.applySeasonColors();
   }
 
+  private getBarkMaterialForOrder(order: number): THREE.MeshStandardMaterial {
+    if (order === 0) {
+      return this.barkSet.trunkBark;
+    } else if (order === 1) {
+      return this.barkSet.primaryBark;
+    } else {
+      return this.barkSet.twigBark;
+    }
+  }
+
   /**
-   * 1:1 还原参考图中的“水平微拱分层枝托云片 (Stratified Foliage Pads)”：
-   * 由 18~28 片具有独立 3D 姿态与向上迎光仰角的夏栎波浪羽裂单叶自然重叠错落，
-   * 严格保留 35%~40% 的透光天窗留白，内堂主干与主枝 100% 露在外面，透光通气。
+   * 1:1 还原参考图中的“水平微拱分层枝托云片”：
+   * 采用 3×2 顶点微卷曲网格 (Curved Quad)，彻底消灭纸片感，展现生机勃勃的叶片张力
    */
   private attachOakFoliagePad(seg: TreeSegmentRenderData): void {
     const isTerminal = seg.order >= 3;
@@ -135,7 +145,7 @@ export class TreeRenderer {
     // 枝托中心位于梢头略偏外侧
     const padCenter = seg.end.clone().addScaledVector(branchNorm, 0.03);
 
-    // 水平法向基向量 (构建横向平展枝托平面)
+    // 水平法向基向量
     const up = new THREE.Vector3(0, 1, 0);
     let right = new THREE.Vector3().crossVectors(branchNorm, up).normalize();
     if (right.lengthSq() < 0.01) {
@@ -143,21 +153,20 @@ export class TreeRenderer {
     }
     const forward = new THREE.Vector3().crossVectors(right, up).normalize();
 
-    // 单叶基准尺寸 (夏栎单叶真实比例)
+    // 单叶基准尺寸
     const leafWidth = 0.082;
     const leafLength = 0.135;
 
     for (let i = 0; i < leafCount; i++) {
-      // 沿椭圆枝托微拱分布 (中心略高、边缘微垂)
+      // 沿椭圆枝托微拱分布
       const angle = (i * Math.PI * 2) / leafCount + (Math.random() - 0.5) * 0.45;
-      const distRatio = Math.sqrt(Math.random()) * 0.85 + 0.15; // 边缘偏多，中心疏朗
+      const distRatio = Math.sqrt(Math.random()) * 0.85 + 0.15;
       const offsetX = Math.cos(angle) * padRadiusX * distRatio;
       const offsetZ = Math.sin(angle) * padRadiusZ * distRatio;
       const offsetY = -Math.pow(distRatio, 2) * 0.025 + (Math.random() - 0.5) * 0.02;
 
-      // 单叶几何体 (叶柄位于网格底端原点，便于沿叶柄旋转)
-      const geom = new THREE.PlaneGeometry(leafWidth, leafLength);
-      geom.translate(0, leafLength * 0.5, 0);
+      // 生成微卷立体网格 (3×2 细分顶点，中脉微凹，叶尖微垂)
+      const geom = this.createCurvedLeafGeometry(leafWidth, leafLength);
 
       const leafMesh = new THREE.Mesh(geom, this.leafMaterial);
 
@@ -168,12 +177,11 @@ export class TreeRenderer {
         .add(new THREE.Vector3(0, offsetY, 0));
       leafMesh.position.copy(leafPos);
 
-      // 单叶 3D 朝向：叶尖向外展开，叶面朝上仰天迎向日光 (仰角 15°~35°)
+      // 单叶 3D 朝向：叶尖向外展开，迎向日光 (仰角 15°~35°)
       leafMesh.lookAt(leafPos.clone().add(new THREE.Vector3(offsetX * 1.5, 0.18, offsetZ * 1.5)));
       leafMesh.rotateX(Math.PI / 2 - 0.35 + (Math.random() - 0.5) * 0.3);
       leafMesh.rotateZ((Math.random() - 0.5) * 0.35);
 
-      // 轻微大小随机扰动
       const scale = 0.88 + Math.random() * 0.28;
       leafMesh.scale.set(scale, scale, scale);
 
@@ -181,6 +189,30 @@ export class TreeRenderer {
       leafMesh.receiveShadow = true;
       this.foliageGroup.add(leafMesh);
     }
+  }
+
+  /**
+   * 生成 3×2 顶点微卷立体单叶网格
+   * 中脉微凹、叶尖微垂，彻底打破死板平面感
+   */
+  private createCurvedLeafGeometry(width: number, length: number): THREE.BufferGeometry {
+    const geom = new THREE.PlaneGeometry(width, length, 2, 2);
+    geom.translate(0, length * 0.5, 0); // 锚点置于叶柄基部
+
+    const pos = geom.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+
+      // 中脉纵深微凹弧度
+      const midribCurve = (1.0 - Math.pow(x / (width * 0.5 + 1e-4), 2)) * -0.008;
+      // 叶尖下垂弧度
+      const tipDroop = Math.pow(y / length, 2) * -0.012;
+
+      pos.setZ(i, midribCurve + tipDroop);
+    }
+    geom.computeVertexNormals();
+    return geom;
   }
 
   private createSegmentMesh(seg: TreeSegmentRenderData): THREE.Mesh {
@@ -191,9 +223,10 @@ export class TreeRenderer {
     // 自然渐进收尖 (Tapering)
     const radiusBottom = seg.radius;
     const radiusTop = seg.radius * (seg.order === 0 ? 0.88 : 0.82);
-    const geom = new THREE.CylinderGeometry(radiusTop, radiusBottom, len, 20);
+    const geom = new THREE.CylinderGeometry(radiusTop, radiusBottom, len, 24);
 
-    const mesh = new THREE.Mesh(geom, this.barkMaterial.clone());
+    const mat = this.getBarkMaterialForOrder(seg.order).clone();
+    const mesh = new THREE.Mesh(geom, mat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
@@ -258,19 +291,18 @@ export class TreeRenderer {
 
   private applySeasonColors(): void {
     if (this.currentSeason === 'Winter') {
-      // 冬季落叶尽净，完美展现“寒林裸骨 (Winter Silhouette)”
       this.foliageGroup.visible = false;
     } else {
       this.foliageGroup.visible = !this.isSkeletonMode;
       switch (this.currentSeason) {
         case 'Spring':
-          this.leafMaterial.color.setHex(0x62a835); // 嫩绿初芽
+          this.leafMaterial.color.setHex(0x65af38); // 鲜嫩黄绿新叶
           break;
         case 'Summer':
-          this.leafMaterial.color.setHex(0x408220); // 浓密苍翠
+          this.leafMaterial.color.setHex(0x3e8620); // 浓密翡翠苍翠
           break;
         case 'Autumn':
-          this.leafMaterial.color.setHex(0xb56d1c); // 温暖金褐红
+          this.leafMaterial.color.setHex(0xb86f1e); // 温暖金褐红
           break;
       }
     }
@@ -292,7 +324,8 @@ export class TreeRenderer {
           wireframe: false,
         });
       } else {
-        mesh.material = this.barkMaterial.clone();
+        const order = mesh.userData.order ?? 0;
+        mesh.material = this.getBarkMaterialForOrder(order).clone();
       }
     }
   }
@@ -304,21 +337,21 @@ export class TreeRenderer {
     }
   }
 
+  public getEvidenceHighlight(): number | null {
+    return this.evidenceSegmentId;
+  }
+
   public highlightSegment(segmentId: number | null): void {
     if (this.hoveredSegmentId === segmentId) return;
     this.hoveredSegmentId = segmentId;
     if (segmentId !== null && this.evidenceSegmentId === null) {
       const mesh = this.segmentMeshes.get(segmentId);
       if (mesh && mesh.material instanceof THREE.MeshStandardMaterial) {
-        mesh.material.emissive.setHex(0x332211);
+        mesh.material.emissive.setHex(0x382818);
       }
     } else if (segmentId === null && this.evidenceSegmentId === null) {
       this.applyDisplayMode();
     }
-  }
-
-  public getEvidenceHighlight(): number | null {
-    return this.evidenceSegmentId;
   }
 
   public updatePulse(elapsedSeconds: number): void {
@@ -326,7 +359,6 @@ export class TreeRenderer {
     const mesh = this.segmentMeshes.get(this.evidenceSegmentId);
     if (!mesh) return;
 
-    // 正弦波脉冲红橙光辉 (0.65 +/- 0.35 * sin(8t))
     const pulse = 0.65 + 0.35 * Math.sin(elapsedSeconds * 8.0);
     const pulseColor = new THREE.Color(1.0, 0.25 * pulse, 0.05);
 
