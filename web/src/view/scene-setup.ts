@@ -7,12 +7,68 @@ export interface SceneContext {
   renderer: THREE.WebGLRenderer;
   controls: OrbitControls;
   container: HTMLElement;
+  keyLight: THREE.DirectionalLight;
+  fillLight: THREE.DirectionalLight;
+  ambientLight: THREE.AmbientLight;
+  setSeasonLighting: (season: string) => void;
 }
+
+export interface SeasonalLightingConfig {
+  keyColor: number;
+  keyIntensity: number;
+  fillColor: number;
+  fillIntensity: number;
+  ambientColor: number;
+  ambientIntensity: number;
+  bgColor: number;
+}
+
+export const SEASONAL_LIGHTS: Record<string, SeasonalLightingConfig> = {
+  Spring: {
+    keyColor: 0xfffaed, // 清亮温润
+    keyIntensity: 2.1,
+    fillColor: 0xa5c4e8,
+    fillIntensity: 0.8,
+    ambientColor: 0xffffff,
+    ambientIntensity: 0.7,
+    bgColor: 0x181c22,
+  },
+  Summer: {
+    keyColor: 0xfff4d6, // 艳阳金辉
+    keyIntensity: 2.4,
+    fillColor: 0x90c2e7,
+    fillIntensity: 0.7,
+    ambientColor: 0xfffcf5,
+    ambientIntensity: 0.8,
+    bgColor: 0x191e24,
+  },
+  Autumn: {
+    keyColor: 0xffdfba, // 暮色斜阳
+    keyIntensity: 2.0,
+    fillColor: 0xd4a373,
+    fillIntensity: 0.75,
+    ambientColor: 0xfcf4ea,
+    ambientIntensity: 0.65,
+    bgColor: 0x221c1a,
+  },
+  Winter: {
+    keyColor: 0xddeeff, // 清冷霜蓝
+    keyIntensity: 1.8,
+    fillColor: 0x88aacc,
+    fillIntensity: 0.9,
+    ambientColor: 0xe8f0f8,
+    ambientIntensity: 0.6,
+    bgColor: 0x151922,
+  },
+};
 
 /**
  * Initializes the Three.js 3D viewport, camera, lights, orbit controls, and pot scenery.
  */
-export function createScene(container: HTMLElement): SceneContext {
+export function createScene(
+  container: HTMLElement,
+  onFrame?: (timeSeconds: number) => void
+): SceneContext {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x181c22);
   scene.fog = new THREE.FogExp2(0x181c22, 0.08);
@@ -62,6 +118,23 @@ export function createScene(container: HTMLElement): SceneContext {
   const fillLight = new THREE.DirectionalLight(0xa5c4e8, 0.8);
   fillLight.position.set(-4, 3, -3);
   scene.add(fillLight);
+
+  // --- Seasonal lighting handler ---
+  const setSeasonLighting = (season: string) => {
+    const config = SEASONAL_LIGHTS[season] || SEASONAL_LIGHTS.Spring;
+    keyLight.color.setHex(config.keyColor);
+    keyLight.intensity = config.keyIntensity;
+    fillLight.color.setHex(config.fillColor);
+    fillLight.intensity = config.fillIntensity;
+    ambientLight.color.setHex(config.ambientColor);
+    ambientLight.intensity = config.ambientIntensity;
+    if (scene.background instanceof THREE.Color) {
+      scene.background.setHex(config.bgColor);
+    }
+    if (scene.fog) {
+      scene.fog.color.setHex(config.bgColor);
+    }
+  };
 
   // --- Scenery: Bonsai Pot & Soil ---
   const sceneryGroup = new THREE.Group();
@@ -136,12 +209,27 @@ export function createScene(container: HTMLElement): SceneContext {
   window.addEventListener('resize', onResize);
 
   // --- Animation Render Loop ---
+  const startTime = performance.now();
   const animate = () => {
     requestAnimationFrame(animate);
+    const elapsedSeconds = (performance.now() - startTime) / 1000;
     controls.update();
+    if (onFrame) {
+      onFrame(elapsedSeconds);
+    }
     renderer.render(scene, camera);
   };
   animate();
 
-  return { scene, camera, renderer, controls, container };
+  return {
+    scene,
+    camera,
+    renderer,
+    controls,
+    container,
+    keyLight,
+    fillLight,
+    ambientLight,
+    setSeasonLighting,
+  };
 }

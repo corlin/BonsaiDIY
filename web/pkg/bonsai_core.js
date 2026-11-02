@@ -12,6 +12,60 @@ export class BonsaiWasmEngine {
         wasm.__wbg_bonsaiwasmengine_free(ptr, 0);
     }
     /**
+     * 推进一个季节，返回包含四季更迭报表的 JSON 字符串
+     * @returns {string}
+     */
+    advance_season() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.bonsaiwasmengine_advance_season(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * 对指定枝段缠绕铝丝并设定弯曲目标方向
+     * @param {number} segment_id
+     * @param {number} gauge_mm
+     * @param {number} target_dir_x
+     * @param {number} target_dir_y
+     * @param {number} target_dir_z
+     * @returns {boolean}
+     */
+    apply_wire(segment_id, gauge_mm, target_dir_x, target_dir_y, target_dir_z) {
+        const ret = wasm.bonsaiwasmengine_apply_wire(this.__wbg_ptr, segment_id, gauge_mm, target_dir_x, target_dir_y, target_dir_z);
+        return ret !== 0;
+    }
+    /**
+     * 评估 Wiki 规则并返回教练诊断警告列表
+     * @param {number} recent_loss_ratio
+     * @returns {string}
+     */
+    evaluate_rules(recent_loss_ratio) {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.bonsaiwasmengine_evaluate_rules(this.__wbg_ptr, recent_loss_ratio);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * 获取最近一次修剪造成的生物质损失比例
+     * @returns {number}
+     */
+    get_last_loss_ratio() {
+        const ret = wasm.bonsaiwasmengine_get_last_loss_ratio(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * 打包全部节间数据供前端 Three.js 直读：
      * 每个枝段布局 [id, order, radius, startX, startY, startZ, endX, endY, endZ] (共 9 个 f32)
      * @returns {Float32Array}
@@ -21,6 +75,22 @@ export class BonsaiWasmEngine {
         var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
         return v1;
+    }
+    /**
+     * 获取树木核心状态（季节、树龄、能量池、枝段数量）
+     * @returns {string}
+     */
+    get_tree_info() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.bonsaiwasmengine_get_tree_info(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
     }
     /**
      * @param {number} seed
@@ -38,6 +108,15 @@ export class BonsaiWasmEngine {
      */
     prune_branch(segment_id) {
         const ret = wasm.bonsaiwasmengine_prune_branch(this.__wbg_ptr, segment_id);
+        return ret !== 0;
+    }
+    /**
+     * 拆除指定枝段上的铝丝
+     * @param {number} segment_id
+     * @returns {boolean}
+     */
+    remove_wire(segment_id) {
+        const ret = wasm.bonsaiwasmengine_remove_wire(this.__wbg_ptr, segment_id);
         return ret !== 0;
     }
 }

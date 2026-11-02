@@ -1,8 +1,9 @@
 use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
 pub type Vector3D = [f32; 3];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Season {
     Spring,
     Summer,
@@ -21,7 +22,7 @@ impl Season {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WireInfo {
     pub gauge_mm: f32,          // 铝丝规格 (1.0 - 4.0 mm)
     pub wired_seasons: u32,     // 缠绕持续的生长季计数

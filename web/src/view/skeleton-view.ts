@@ -29,6 +29,7 @@ export class TreeRenderer {
   private interactiveMeshes: THREE.Mesh[] = [];
   private isSkeletonMode: boolean = false;
   private hoveredSegmentId: number | null = null;
+  private evidenceSegmentId: number | null = null;
 
   constructor(scene: THREE.Scene) {
     this.parentScene = scene;
@@ -207,6 +208,64 @@ export class TreeRenderer {
   }
 
   /**
+   * Sets the segment ID identified as a rule diagnostic evidence issue.
+   * This branch will pulse with an alert red warning emissive light.
+   */
+  public setEvidenceHighlight(segmentId: number | null): void {
+    if (this.evidenceSegmentId !== null && this.evidenceSegmentId !== segmentId) {
+      const prevMeshes = this.segmentMeshes.get(this.evidenceSegmentId);
+      if (prevMeshes) {
+        for (const m of prevMeshes) {
+          const mat = m.material as THREE.MeshStandardMaterial;
+          if (this.hoveredSegmentId === this.evidenceSegmentId) {
+            mat.emissive.setHex(0x38bdf8);
+            mat.emissiveIntensity = 0.6;
+          } else {
+            mat.emissive.setHex(0x000000);
+            mat.emissiveIntensity = 0.0;
+          }
+        }
+      }
+    }
+
+    this.evidenceSegmentId = segmentId;
+
+    if (segmentId !== null && segmentId !== this.hoveredSegmentId) {
+      const currentMeshes = this.segmentMeshes.get(segmentId);
+      if (currentMeshes) {
+        for (const m of currentMeshes) {
+          const mat = m.material as THREE.MeshStandardMaterial;
+          mat.emissive.setHex(0xef4444);
+          mat.emissiveIntensity = 0.7;
+        }
+      }
+    }
+  }
+
+  public getEvidenceHighlight(): number | null {
+    return this.evidenceSegmentId;
+  }
+
+  /**
+   * Called per frame to animate the warning pulse of the evidence branch.
+   */
+  public updatePulse(timeSeconds: number): void {
+    if (this.evidenceSegmentId === null) return;
+    if (this.evidenceSegmentId === this.hoveredSegmentId) return;
+
+    const meshes = this.segmentMeshes.get(this.evidenceSegmentId);
+    if (!meshes) return;
+
+    // Smooth pulse between 0.4 and 0.95 intensity
+    const intensity = 0.65 + 0.35 * Math.sin(timeSeconds * 5.0);
+    for (const m of meshes) {
+      const mat = m.material as THREE.MeshStandardMaterial;
+      mat.emissive.setHex(0xef4444);
+      mat.emissiveIntensity = intensity;
+    }
+  }
+
+  /**
    * Highlights or unhighlights a hovered segment
    */
   public highlightSegment(segmentId: number | null): void {
@@ -216,8 +275,13 @@ export class TreeRenderer {
       if (prevMeshes) {
         for (const m of prevMeshes) {
           const mat = m.material as THREE.MeshStandardMaterial;
-          mat.emissive.setHex(0x000000);
-          mat.emissiveIntensity = 0.0;
+          if (this.hoveredSegmentId === this.evidenceSegmentId) {
+            mat.emissive.setHex(0xef4444);
+            mat.emissiveIntensity = 0.7;
+          } else {
+            mat.emissive.setHex(0x000000);
+            mat.emissiveIntensity = 0.0;
+          }
         }
       }
     }
@@ -265,5 +329,6 @@ export class TreeRenderer {
     this.interactiveMeshes = [];
     this.segments = [];
     this.hoveredSegmentId = null;
+    this.evidenceSegmentId = null;
   }
 }

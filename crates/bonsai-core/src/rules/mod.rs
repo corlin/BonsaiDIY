@@ -1,16 +1,17 @@
 pub mod proportions;
 pub mod pruning_rules;
 
+use serde::{Deserialize, Serialize};
 use crate::model::TreeGraph;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Severity {
     Info,
     Warning,
     Danger,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DiagnosticIssue {
     pub rule_id: String,
     pub severity: Severity,
