@@ -216,4 +216,4 @@ flowchart TD
 
 ## 附录 B：竞品调研原始记录
 
-见会话 scratch 目录 `market_research_notes.md`（Steam storesearch API 与 iTunes Search API，2026-11-02，美区）。局限：无下载/营收数据；Reddit 订阅数未核实；中日商店未调研。
+见 [docs/research/2026-11-02-competitor-scan.md](../../research/2026-11-02-competitor-scan.md)（Steam storesearch API 与 iTunes Search API，2026-11-02，美区）。局限：无下载/营收数据；Reddit 订阅数未核实；中日商店未调研。
